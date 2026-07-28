@@ -1,0 +1,213 @@
+/* =========================================================================
+ *  삼국지 III 웹 오마주 — 도트 UI 스타일
+ *  스테이지 1280x800 (내부 640x400 을 2배) / 모든 수치는 2px 격자
+ * ========================================================================= */
+@import url('https://cdn.jsdelivr.net/gh/quiple/galmuri/dist/galmuri.css');
+
+:root {
+  --navy:      #0a0a70;
+  --navy-dk:   #05053c;
+  --navy-lt:   #1818a8;
+  --brd-hi:    #f0a848;
+  --brd:       #b85c18;
+  --brd-dk:    #4c1c00;
+  --white:     #f8f8f8;
+  --cyan:      #48e0f0;
+  --yellow:    #f8f000;
+  --green:     #38e038;
+  --magenta:   #f070d8;
+  --orange:    #f0a040;
+  --red:       #f04040;
+  --gray:      #a8a8b8;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  background: #000;
+  overflow: hidden;
+  font-family: 'Galmuri14', 'Galmuri11', 'DungGeunMo', monospace;
+  -webkit-font-smoothing: none;
+  font-smooth: never;
+  color: var(--white);
+  cursor: default;
+  user-select: none;
+}
+
+#viewport { position: fixed; inset: 0; display: grid; place-items: center; }
+
+#stage {
+  position: relative;
+  width: 1280px;
+  height: 800px;
+  background: #000048;
+  transform-origin: center center;
+  overflow: hidden;
+  font-size: 28px;
+  line-height: 34px;
+}
+
+canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edges; }
+
+/* ── 도트 테두리 패널 (원작의 이중 오렌지 프레임) ───────────────────── */
+.panel {
+  position: absolute;
+  background: var(--navy);
+  border: 4px solid var(--brd);
+  outline: 2px solid #000;
+  box-shadow:
+    inset 0 0 0 2px var(--brd-dk),
+    inset 0 0 0 4px var(--brd-hi),
+    inset 0 0 0 6px var(--brd-dk),
+    0 0 0 2px #000;
+  padding: 8px 12px;
+}
+
+.panel.plain { box-shadow: inset 0 0 0 2px var(--brd-dk), 0 0 0 2px #000; }
+
+/* ── 지도 ──────────────────────────────────────────────────────────── */
+#mapwrap { position: absolute; left: 0; top: 44px; width: 1280px; height: 756px; }
+#map { width: 1280px; height: 756px; }
+
+/* ── 상단 명령 바 ──────────────────────────────────────────────────── */
+#cmdbar {
+  position: absolute; left: 0; top: 0; width: 1280px; height: 44px;
+  background: var(--navy);
+  border-top: 2px solid var(--brd-hi);
+  border-bottom: 2px solid var(--brd-hi);
+  display: flex; align-items: center; justify-content: center; gap: 22px;
+  font-size: 28px; letter-spacing: 1px;
+  z-index: 30;
+}
+#cmdbar .ci { color: var(--white); }
+#cmdbar .ci b { color: var(--white); font-weight: normal; }
+#cmdbar .ci.on { background: var(--brd); color: #fff; }
+#cmdbar .ci.off { color: #6868a0; }
+
+/* ── 시세 패널 ─────────────────────────────────────────────────────── */
+#market { right: 8px; top: 56px; width: 214px; text-align: center; }
+#market .ttl { color: var(--cyan); margin-bottom: 2px; }
+#market .row { display: flex; justify-content: space-between; padding: 0 4px; }
+#market .row span:first-child { color: var(--cyan); }
+#market .row span:last-child { color: var(--white); }
+
+/* ── 초상화 패널 ───────────────────────────────────────────────────── */
+#facepane { right: 8px; top: 330px; width: 214px; height: 240px; padding: 6px; }
+#facepane canvas { width: 190px; height: 220px; }
+
+/* ── 연월 박스 ─────────────────────────────────────────────────────── */
+#datebox {
+  left: 8px; bottom: 8px; width: 268px; height: 60px;
+  background: var(--white); color: #000; border-color: var(--brd);
+  display: flex; align-items: center; justify-content: space-around;
+  box-shadow: inset 0 0 0 2px var(--brd-dk), 0 0 0 2px #000;
+  letter-spacing: 1px;
+}
+
+/* ── 메시지 창 ─────────────────────────────────────────────────────── */
+#msgbar {
+  left: 288px; right: 8px; bottom: 8px; height: 124px;
+  padding: 12px 18px; z-index: 25;
+}
+#msgbar .line { white-space: pre-wrap; }
+#msgbar .cur::after {
+  content: '_'; color: var(--orange);
+  animation: blink 1s steps(1) infinite;
+}
+@keyframes blink { 50% { opacity: 0; } }
+
+/* ── 도시 정보 패널 ────────────────────────────────────────────────── */
+#citypane { left: 8px; top: 56px; width: 500px; z-index: 20; }
+#citypane .hd { display: flex; gap: 14px; align-items: center; margin-bottom: 6px; }
+#citypane .sq { width: 26px; height: 26px; border: 2px solid #000; }
+#citypane .off { display: flex; gap: 10px; margin-bottom: 8px; }
+#citypane table { border-collapse: collapse; width: 100%; }
+#citypane td { padding: 1px 0; }
+#citypane td.k { color: var(--white); width: 96px; }
+#citypane td.v { text-align: right; width: 148px; color: var(--white); }
+#citypane td.g { width: 220px; }
+.gauge { position: relative; height: 22px; background: #000030; border: 2px solid #202060; }
+.gauge > i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--green); }
+.gauge > i.b { background: #38c0e0; }
+.gauge > i.r { background: #e04040; }
+
+/* ── 중앙 메뉴 / 리스트 / 대화 ─────────────────────────────────────── */
+#center { position: absolute; inset: 0; pointer-events: none; z-index: 90; }
+#center > .panel { pointer-events: auto; }
+
+.menu { min-width: 300px; }
+.menu .it { padding: 0 10px; color: var(--white); cursor: pointer; }
+.menu .it.sel { background: var(--brd); }
+.menu .it.dis { color: #6868a0; }
+.menu .hd { color: var(--cyan); border-bottom: 2px solid var(--navy-lt); margin-bottom: 4px; }
+
+.speech {
+  position: absolute; background: var(--white); color: #000;
+  border: 4px solid #000; padding: 10px 18px; white-space: pre-line;
+}
+.speech::after {
+  content: ''; position: absolute; left: -22px; top: 26px;
+  border: 10px solid transparent; border-right-color: var(--white);
+}
+
+/* ── 리스트(무장/도시 일람) ─────────────────────────────────────────── */
+.grid { border-collapse: collapse; width: 100%; font-size: 24px; line-height: 28px; }
+.grid th { color: var(--cyan); text-align: right; padding: 0 8px; font-weight: normal; }
+.grid th.l, .grid td.l { text-align: left; }
+.grid td { padding: 0 8px; text-align: right; }
+.grid tr.sel td { background: var(--brd); }
+.grid tr.dim td { color: #7878a8; }
+
+/* ── 타이틀 / 군주선택 ─────────────────────────────────────────────── */
+#title {
+  position: absolute; inset: 0; z-index: 60;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 34px;
+  background:
+    repeating-linear-gradient(0deg, rgba(0,0,0,.28) 0 2px, rgba(0,0,0,0) 2px 4px),
+    radial-gradient(120% 90% at 50% 40%, #1c1c9c 0%, #0a0a58 55%, #02021e 100%);
+}
+#title .box { position: static; padding: 34px 76px 28px; text-align: center; }
+#title .big {
+  font-size: 96px; line-height: 108px; color: var(--yellow); letter-spacing: 10px;
+  text-shadow: 6px 6px 0 #8c2000, 12px 12px 0 rgba(0,0,0,.55);
+}
+#title .sub { color: var(--cyan); margin-top: 14px; letter-spacing: 4px; font-size: 26px; }
+#title .cred { color: #b8b8e8; margin-top: 8px; font-size: 22px; }
+#title .hint { color: var(--white); animation: blink 1.4s steps(1) infinite; }
+#title .keys { color: #8888c8; font-size: 22px; }
+
+#rulersel { left: 20px; top: 150px; width: 1016px; z-index: 50; }
+#rulersel .rw { display: flex; justify-content: center; gap: 8px; }
+#rulersel .card { width: 158px; text-align: center; cursor: pointer; padding: 4px; }
+#rulersel .card.sel { background: var(--brd); }
+#rulersel .card canvas { width: 142px; height: 166px; }
+#rulersel .nm { font-size: 24px; line-height: 30px; }
+#rulersel .cw { display: flex; align-items: center; gap: 8px; justify-content: center; font-size: 22px; }
+#rulersel .cw i { width: 22px; height: 22px; border: 2px solid #000; }
+
+/* ── 전투 화면 ─────────────────────────────────────────────────────── */
+#warscreen { position: absolute; inset: 0; background: #000; z-index: 70; display: none; }
+#warscreen.on { display: block; }
+#warmap { position: absolute; left: 0; top: 44px; width: 1280px; height: 648px; }
+#warhud {
+  position: absolute; left: 0; bottom: 0; width: 1280px; height: 108px;
+  background: var(--navy); border-top: 4px solid var(--brd-hi);
+  padding: 8px 16px; display: flex; gap: 24px; align-items: flex-start;
+}
+#warhud .col { font-size: 22px; line-height: 28px; }
+#warbar {
+  position: absolute; left: 0; top: 0; width: 1280px; height: 44px;
+  background: var(--navy); border-bottom: 4px solid var(--brd-hi);
+  display: flex; align-items: center; gap: 28px; padding: 0 16px; font-size: 26px;
+}
+#unitinfo { right: 8px; top: 56px; width: 300px; font-size: 24px; line-height: 30px; z-index: 75; }
+
+.hi { color: var(--cyan); }
+.hy { color: var(--yellow); }
+.hg { color: var(--green); }
+.hm { color: var(--magenta); }
+.ho { color: var(--orange); }
+.hr { color: var(--red); }
+.hw { color: var(--white); }
+.hidden { display: none !important; }

@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>초상화 확인용</title>
+<link rel="stylesheet" href="../css/style.css">
+<style>
+  body { overflow: auto; background: #101040; }
+  #viewport { position: static; display: block; padding: 20px; }
+  .cell { display: inline-block; text-align: center; margin: 6px; }
+  .cell canvas { width: 142px; height: 166px; }
+  .cell div { font-size: 22px; color: #f8f8f8; }
+</style>
+</head>
+<body>
+<div id="viewport"><div id="grid"></div></div>
+<script src="../js/data.js"></script>
+<script src="../js/portrait.js"></script>
+<script>
+  const names = Object.keys(GENERALS);
+  document.getElementById('grid').innerHTML = names.map(n =>
+    `<span class="cell"><canvas width="95" height="110" data-n="${n}"></canvas><div>${n}</div></span>`).join('');
+  document.fonts.ready.then(() => {
+    document.querySelectorAll('canvas').forEach(c =>
+      Portrait.draw(c, c.dataset.n, { ruler: /조조|유비|손권|원소|동탁|손견|손책|공손찬|유표|유장|장로|마등|원술|도겸|한복|공융|왕랑|사섭|맹획|유요|여포|이각|엄백호|유도/.test(c.dataset.n) }));
+  });
+</script>
+</body>
+</html>

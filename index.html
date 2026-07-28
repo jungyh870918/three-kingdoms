@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>삼국지 III — 웹 오마주</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="viewport">
+  <div id="stage">
+
+    <!-- 지도 -->
+    <div id="mapwrap"><canvas id="map" width="640" height="378"></canvas></div>
+
+    <!-- 상단 명령 바 -->
+    <div id="cmdbar"></div>
+
+    <!-- 시세 -->
+    <div id="market" class="panel">
+      <div class="ttl">시세</div>
+      <div class="row"><span>쌀팜</span><span id="m-ricebuy">0</span></div>
+      <div class="row"><span>쌀삼</span><span id="m-ricesell">0</span></div>
+      <div class="row"><span>노궁</span><span id="m-bow">0</span></div>
+      <div class="row"><span>강노</span><span id="m-cbow">0</span></div>
+      <div class="row"><span>군마</span><span id="m-horse">0</span></div>
+    </div>
+
+    <!-- 초상화 -->
+    <div id="facepane" class="panel"><canvas id="face" width="95" height="110"></canvas></div>
+
+    <!-- 도시 정보 -->
+    <div id="citypane" class="panel hidden"></div>
+
+    <!-- 연월 -->
+    <div id="datebox" class="panel"><span id="d-year">190년</span><span id="d-season">봄</span><span id="d-month">1월</span></div>
+
+    <!-- 메시지 -->
+    <div id="msgbar" class="panel"><div class="line" id="msg"></div></div>
+
+    <!-- 중앙 레이어(메뉴/대화/일람) -->
+    <div id="center"></div>
+
+    <!-- 전투 -->
+    <div id="warscreen">
+      <div id="warbar"></div>
+      <canvas id="warmap" width="640" height="324"></canvas>
+      <div id="warhud"></div>
+      <div id="unitinfo" class="panel hidden"></div>
+    </div>
+
+    <!-- 타이틀 -->
+    <div id="title">
+      <div class="box panel">
+        <div class="big">삼국지 Ⅲ</div>
+        <div class="sub">SAN·GUO·ZHI Ⅲ　—　WEB HOMAGE</div>
+        <div class="cred">코에이 「삼국지 Ⅲ」(1992) 오마주 · 도트 웹 버전</div>
+      </div>
+      <div class="hint" id="titlehint">아무 키나 눌러 주세요</div>
+      <div class="keys">키보드 : 숫자 0~9 명령　방향키 이동　Enter 결정　ESC 취소　마우스도 사용 가능</div>
+    </div>
+
+    <!-- 군주 선택 -->
+    <div id="rulersel" class="panel hidden"></div>
+
+  </div>
+</div>
+
+<script src="js/data.js"></script>
+<script src="js/portrait.js"></script>
+<script src="js/map.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/battle.js"></script>
+<script src="js/game.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
