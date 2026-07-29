@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>인물 삽화 도트 변환기</title>
+<link rel="stylesheet" href="../css/style.css">
+<style>
+  html, body { overflow: auto; background: #0a0a24; }
+  #viewport { position: static; display: block; padding: 16px 20px 60px; }
+  h1 { font-size: 30px; color: var(--yellow); margin-bottom: 4px; }
+  .sub { font-size: 20px; color: #a8a8d8; margin-bottom: 14px; line-height: 28px; }
+  #drop {
+    border: 4px dashed #5858a0; padding: 26px; text-align: center; color: #b8b8e8;
+    font-size: 24px; margin-bottom: 14px; background: #12123c;
+  }
+  #drop.on { border-color: var(--yellow); color: var(--yellow); background: #1c1c58; }
+  .bar { display: flex; flex-wrap: wrap; gap: 14px 22px; align-items: center;
+         background: #12123c; border: 2px solid #3c3c78; padding: 10px 14px; margin-bottom: 14px; }
+  .bar label { font-size: 19px; color: #d8d8f8; display: flex; align-items: center; gap: 6px; }
+  .bar input[type=range] { width: 128px; }
+  .bar b { color: var(--yellow); font-weight: normal; min-width: 34px; display: inline-block; }
+  button {
+    font-family: inherit; font-size: 20px; padding: 6px 16px; cursor: pointer;
+    background: var(--brd); color: #fff; border: 2px solid #000; box-shadow: inset 0 0 0 2px var(--brd-hi);
+  }
+  button:hover { background: #d87828; }
+  button.ghost { background: #2c2c60; box-shadow: inset 0 0 0 2px #5858a0; }
+  #grid { display: flex; flex-wrap: wrap; gap: 10px; }
+  .card { background: #16163c; border: 2px solid #3c3c78; padding: 8px; width: 216px; }
+  .card canvas { width: 190px; height: 220px; display: block; margin: 0 auto; }
+  .card .nm { width: 100%; font-family: inherit; font-size: 19px; text-align: center;
+              background: #0a0a28; color: #fff; border: 2px solid #3c3c78; margin-top: 6px; padding: 2px; }
+  .card .row { display: flex; gap: 4px; margin-top: 5px; }
+  .card .row button { flex: 1; font-size: 16px; padding: 3px 0; }
+  .card .warn { color: #ff9090; font-size: 16px; text-align: center; margin-top: 3px; }
+  .card .ok { color: #90ffa0; font-size: 16px; text-align: center; margin-top: 3px; }
+  #status { font-size: 20px; color: #b8ffd0; margin: 10px 0; line-height: 28px; }
+  #missing { font-size: 17px; color: #9090c8; line-height: 24px; margin-top: 10px;
+             max-height: 150px; overflow: auto; border-top: 2px solid #3c3c78; padding-top: 8px; }
+</style>
+</head>
+<body>
+<div id="viewport">
+  <h1>인물 삽화 도트 변환기</h1>
+  <div class="sub">
+    AI로 만든 초상 이미지를 끌어다 놓으면 게임과 같은 95×110 도트 초상화(금색 액자 포함)로 바꿔 줍니다.<br>
+    <b>파일 이름이 곧 무장 이름</b>입니다 — <code>관우.png</code>, <code>조조.jpg</code> 처럼 저장해 두면 자동으로 짝이 맞습니다.<br>
+    다 만든 뒤 <b>[js/art.js 내려받기]</b> 를 눌러 나온 파일을 프로젝트의 <code>js/art.js</code> 에 덮어쓰면 게임에 바로 반영됩니다.
+  </div>
+
+  <div id="drop">이미지를 여기에 끌어다 놓으세요 &nbsp;(여러 장 한꺼번에 가능) &nbsp;— 또는 클릭해서 고르기
+    <input type="file" id="file" accept="image/*" multiple hidden>
+  </div>
+
+  <div class="bar">
+    <label>색 수 <input type="range" id="pal" min="6" max="48" value="18"><b id="palv">18</b></label>
+    <label>디더링 <input type="range" id="dit" min="0" max="100" value="55"><b id="ditv">55</b></label>
+    <label>대비 <input type="range" id="con" min="50" max="200" value="118"><b id="conv">118</b></label>
+    <label>채도 <input type="range" id="sat" min="0" max="200" value="118"><b id="satv">118</b></label>
+    <label>밝기 <input type="range" id="bri" min="50" max="150" value="104"><b id="briv">104</b></label>
+    <label>윤곽 <input type="range" id="edg" min="0" max="100" value="35"><b id="edgv">35</b></label>
+    <label><input type="checkbox" id="snap"> 게임 팔레트로 맞추기</label>
+    <button id="redraw">다시 그리기</button>
+    <button id="save" class="ghost">js/art.js 내려받기</button>
+    <button id="clear" class="ghost">모두 지우기</button>
+  </div>
+
+  <div id="status">아직 불러온 그림이 없습니다.</div>
+  <div id="grid"></div>
+  <div id="missing"></div>
+</div>
+
+<script src="../js/data.js"></script>
+<script src="../js/faces.js"></script>
+<script src="../js/art.js"></script>
+<script src="../js/portrait.js"></script>
+<script>
+/* =========================================================================
+ *  원본 이미지 → 95x110 도트 초상화
+ *  1) 얼굴 위주로 자르고 축소   2) 대비·채도 보정   3) 중앙값 분할로 색 줄이기
+ *  4) 베이어 4x4 디더링         5) 윤곽 강조        6) 금색 액자 합성
+ * ========================================================================= */
+const W = 95, H = 110, IX = 6, IY = 6, IW = W - 12, IH = H - 12;
+const BAYER = [[0,8,2,10],[12,4,14,6],[3,11,1,9],[15,7,13,5]];
+/* 게임 UI 팔레트(맞추기 옵션용) */
+const GAME_PAL = [
+  [0x10,0x08,0x00],[0x24,0x18,0x10],[0x3c,0x24,0x14],[0x6c,0x6c,0x74],[0xdc,0xdc,0xdc],
+  [0xcc,0x6a,0x4c],[0x9c,0x70,0x48],[0xf2,0xd2,0xb2],[0xe0,0xac,0x84],[0xc0,0x88,0x58],[0xd8,0xc0,0x88],
+  [0x1c,0x6c,0x34],[0x38,0xa0,0x58],[0xa8,0x20,0x20],[0xe0,0x48,0x48],[0x8c,0x18,0x28],
+  [0x20,0x40,0x90],[0x40,0x70,0xd0],[0x18,0x68,0x58],[0x2c,0x90,0x78],[0x58,0x30,0x60],[0x80,0x50,0xa0],
+  [0xb0,0x88,0x20],[0xe8,0xc8,0x50],[0xc8,0xa8,0x18],[0xf0,0xe0,0x60],[0xc8,0xc8,0xc0],[0xf0,0xf0,0xe8],
+  [0x1c,0x1c,0x28],[0x3c,0x3c,0x50],[0x6c,0x44,0x20],[0xa0,0x6c,0x38],[0x9c,0x9c,0xae],[0xd8,0xd8,0xe8],
+];
+
+const items = [];                       // {name, img, canvas, crop:{x,y,s}}
+const $ = s => document.querySelector(s);
+const opt = () => ({
+  pal: +$('#pal').value, dit: +$('#dit').value / 100, con: +$('#con').value / 100,
+  sat: +$('#sat').value / 100, bri: +$('#bri').value / 100, edg: +$('#edg').value / 100,
+  snap: $('#snap').checked,
+});
+
+/* ── 파일 받기 ─────────────────────────────────────────────────────── */
+const drop = $('#drop');
+drop.addEventListener('click', () => $('#file').click());
+$('#file').addEventListener('change', e => addFiles(e.target.files));
+['dragenter','dragover'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add('on'); }));
+['dragleave','drop'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.remove('on'); }));
+drop.addEventListener('drop', e => addFiles(e.dataTransfer.files));
+
+function addFiles(files) {
+  const list = [...files].filter(f => /^image\//.test(f.type));
+  let left = list.length;
+  if (!left) return;
+  list.forEach(f => {
+    const img = new Image();
+    img.onload = () => {
+      const name = f.name.replace(/\.[^.]+$/, '').trim();
+      items.push({ name, img, crop: { x: 0.5, y: 0.42, s: 0.86 } });
+      if (--left === 0) render();
+    };
+    img.onerror = () => { if (--left === 0) render(); };
+    img.src = URL.createObjectURL(f);
+  });
+}
+
+/* ── 변환 ──────────────────────────────────────────────────────────── */
+function convert(item, o) {
+  const src = item.img;
+  /* 1. 얼굴 위주로 자르기 : 세로로 조금 긴 사각형 */
+  const ar = IW / IH;
+  let cw = Math.min(src.width, src.height * ar) * item.crop.s;
+  let ch = cw / ar;
+  if (ch > src.height * item.crop.s) { ch = src.height * item.crop.s; cw = ch * ar; }
+  const cx = Math.max(0, Math.min(src.width - cw, src.width * item.crop.x - cw / 2));
+  const cy = Math.max(0, Math.min(src.height - ch, src.height * item.crop.y - ch / 2));
+
+  /* 2. 축소 (두 단계로 줄여야 뭉개지지 않는다) */
+  const mid = document.createElement('canvas');
+  mid.width = IW * 3; mid.height = IH * 3;
+  const mg = mid.getContext('2d');
+  mg.imageSmoothingQuality = 'high';
+  mg.drawImage(src, cx, cy, cw, ch, 0, 0, mid.width, mid.height);
+  const small = document.createElement('canvas');
+  small.width = IW; small.height = IH;
+  const sg = small.getContext('2d');
+  sg.imageSmoothingQuality = 'high';
+  sg.drawImage(mid, 0, 0, IW, IH);
+
+  const im = sg.getImageData(0, 0, IW, IH);
+  const d = im.data;
+
+  /* 3. 밝기·대비·채도 보정 */
+  for (let i = 0; i < d.length; i += 4) {
+    let r = d[i], g = d[i + 1], b = d[i + 2];
+    const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+    r = lum + (r - lum) * o.sat; g = lum + (g - lum) * o.sat; b = lum + (b - lum) * o.sat;
+    r = (r - 128) * o.con + 128; g = (g - 128) * o.con + 128; b = (b - 128) * o.con + 128;
+    d[i] = clamp8(r * o.bri); d[i + 1] = clamp8(g * o.bri); d[i + 2] = clamp8(b * o.bri);
+  }
+
+  /* 4. 윤곽 강조 (소벨 경계를 어둡게) */
+  if (o.edg > 0) {
+    const cp = new Uint8ClampedArray(d);
+    const at = (x, y, c) => cp[((y * IW + x) << 2) + c];
+    for (let y = 1; y < IH - 1; y++) for (let x = 1; x < IW - 1; x++) {
+      let gx = 0, gy = 0;
+      for (let c = 0; c < 3; c++) {
+        gx += (at(x + 1, y, c) - at(x - 1, y, c));
+        gy += (at(x, y + 1, c) - at(x, y - 1, c));
+      }
+      const mag = Math.min(255, Math.hypot(gx, gy) / 3) * o.edg;
+      const i = ((y * IW + x) << 2);
+      d[i] = clamp8(d[i] - mag); d[i + 1] = clamp8(d[i + 1] - mag); d[i + 2] = clamp8(d[i + 2] - mag);
+    }
+  }
+
+  /* 5. 색 줄이기 */
+  const palette = o.snap ? GAME_PAL : medianCut(d, o.pal);
+
+  /* 6. 디더링하며 팔레트에 맞추기 */
+  for (let y = 0; y < IH; y++) for (let x = 0; x < IW; x++) {
+    const i = ((y * IW + x) << 2);
+    const t = (BAYER[y & 3][x & 3] / 16 - 0.5) * 42 * o.dit;
+    const c = nearest(palette, clamp8(d[i] + t), clamp8(d[i + 1] + t), clamp8(d[i + 2] + t));
+    d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2]; d[i + 3] = 255;
+  }
+  sg.putImageData(im, 0, 0);
+
+  /* 7. 액자에 넣기 */
+  const out = document.createElement('canvas');
+  out.width = W; out.height = H;
+  const g = out.getContext('2d');
+  g.imageSmoothingEnabled = false;
+  Portrait.frame(g, W, H);
+  g.drawImage(small, IX, IY);
+  return out;
+}
+
+const clamp8 = v => v < 0 ? 0 : v > 255 ? 255 : v | 0;
+
+function nearest(pal, r, g, b) {
+  let best = pal[0], bd = 1e9;
+  for (let i = 0; i < pal.length; i++) {
+    const p = pal[i];
+    const dr = r - p[0], dg = g - p[1], db = b - p[2];
+    const dd = dr * dr * 0.3 + dg * dg * 0.59 + db * db * 0.11;
+    if (dd < bd) { bd = dd; best = p; }
+  }
+  return best;
+}
+
+/* 중앙값 분할(median cut) 색 줄이기 */
+function medianCut(data, n) {
+  const px = [];
+  for (let i = 0; i < data.length; i += 4) px.push([data[i], data[i + 1], data[i + 2]]);
+  let boxes = [px];
+  while (boxes.length < n) {
+    boxes.sort((a, b) => spread(b) - spread(a));
+    const box = boxes.shift();
+    if (!box || box.length < 2) { boxes.push(box); break; }
+    const ch = widestChannel(box);
+    box.sort((a, b) => a[ch] - b[ch]);
+    const mid = box.length >> 1;
+    boxes.push(box.slice(0, mid), box.slice(mid));
+  }
+  return boxes.filter(b => b && b.length).map(b => {
+    const s = [0, 0, 0];
+    b.forEach(p => { s[0] += p[0]; s[1] += p[1]; s[2] += p[2]; });
+    return [Math.round(s[0] / b.length), Math.round(s[1] / b.length), Math.round(s[2] / b.length)];
+  });
+}
+function widestChannel(box) {
+  const mn = [255, 255, 255], mx = [0, 0, 0];
+  box.forEach(p => { for (let c = 0; c < 3; c++) { if (p[c] < mn[c]) mn[c] = p[c]; if (p[c] > mx[c]) mx[c] = p[c]; } });
+  const r = mx[0] - mn[0], g = mx[1] - mn[1], b = mx[2] - mn[2];
+  return r >= g && r >= b ? 0 : g >= b ? 1 : 2;
+}
+function spread(box) {
+  if (!box || !box.length) return -1;
+  const mn = [255, 255, 255], mx = [0, 0, 0];
+  box.forEach(p => { for (let c = 0; c < 3; c++) { if (p[c] < mn[c]) mn[c] = p[c]; if (p[c] > mx[c]) mx[c] = p[c]; } });
+  return (mx[0] - mn[0]) + (mx[1] - mn[1]) + (mx[2] - mn[2]);
+}
+
+/* ── 화면 ──────────────────────────────────────────────────────────── */
+function render() {
+  const o = opt();
+  const grid = $('#grid');
+  grid.innerHTML = '';
+  items.forEach((it, i) => {
+    it.canvas = convert(it, o);
+    const known = typeof GENERALS !== 'undefined' && !!GENERALS[it.name];
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = `<div></div>
+      <input class="nm" value="${it.name}" data-i="${i}">
+      <div class="${known ? 'ok' : 'warn'}">${known ? '무장 명단과 일치' : '※ 명단에 없는 이름'}</div>
+      <div class="row">
+        <button data-a="up" data-i="${i}">▲</button>
+        <button data-a="down" data-i="${i}">▼</button>
+        <button data-a="in" data-i="${i}">＋</button>
+        <button data-a="out" data-i="${i}">－</button>
+        <button data-a="del" data-i="${i}">✕</button>
+      </div>`;
+    card.firstElementChild.replaceWith(it.canvas);
+    grid.appendChild(card);
+  });
+  const known = items.filter(it => GENERALS[it.name]).length;
+  $('#status').textContent = `그림 ${items.length}장 (무장 명단과 일치: ${known}장)`;
+  showMissing();
+  if (new URLSearchParams(location.search).get('dump') && items.length) {
+    let ta = document.getElementById('dump');
+    if (!ta) { ta = document.createElement('pre'); ta.id = 'dump'; ta.style.cssText = 'position:absolute;left:-9999px'; document.body.appendChild(ta); }
+    ta.textContent = buildArtFile();
+  }
+}
+
+function showMissing() {
+  if (typeof GENERALS === 'undefined') return;
+  const have = new Set(items.map(it => it.name));
+  const miss = Object.keys(GENERALS).filter(n => !have.has(n));
+  $('#missing').innerHTML = `<b style="color:#c8c8ff">아직 삽화가 없는 무장 ${miss.length}명</b><br>${miss.join(' · ')}`;
+}
+
+document.addEventListener('input', e => {
+  if (e.target.classList.contains('nm')) { items[+e.target.dataset.i].name = e.target.value.trim(); showMissing(); return; }
+  if (e.target.type === 'range' || e.target.type === 'checkbox') {
+    ['pal', 'dit', 'con', 'sat', 'bri', 'edg'].forEach(k => { $('#' + k + 'v').textContent = $('#' + k).value; });
+  }
+});
+document.addEventListener('click', e => {
+  const a = e.target.dataset && e.target.dataset.a;
+  if (!a) return;
+  const i = +e.target.dataset.i, it = items[i];
+  if (a === 'del') items.splice(i, 1);
+  else if (a === 'up') it.crop.y = Math.max(0.1, it.crop.y - 0.05);
+  else if (a === 'down') it.crop.y = Math.min(0.9, it.crop.y + 0.05);
+  else if (a === 'in') it.crop.s = Math.max(0.25, it.crop.s - 0.08);
+  else if (a === 'out') it.crop.s = Math.min(1, it.crop.s + 0.08);
+  render();
+});
+$('#redraw').onclick = render;
+$('#clear').onclick = () => { items.length = 0; render(); };
+
+function buildArtFile() {
+  const lines = items.filter(it => it.name).map(it =>
+    `  '${it.name}': '${it.canvas.toDataURL('image/png')}',`);
+  return `/* =========================================================================
+ *  인물 삽화 —  tools/pixelize.html 로 만든 자료입니다.
+ *  이름 → data:image/png;base64,...  (95x110, 금색 액자 포함)
+ *  여기에 없는 무장은 이름 해시 기반 도트 초상화가 대신 그려집니다.
+ * ========================================================================= */
+const ART = {
+${lines.join('\n')}
+};
+`;
+  const blob = new Blob([body], { type: 'text/javascript' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'art.js';
+  a.click();
+};
+
+/* 시험용 :  ?load=파일1,파일2  (웹 서버로 열었을 때만 동작) */
+(function () {
+  const q = new URLSearchParams(location.search);
+  if (!q.get('load')) return;
+  const urls = q.get('load').split(',');
+  let left = urls.length;
+  urls.forEach(u => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      items.push({ name: decodeURIComponent(u.split('/').pop().replace(/\.[^.]+$/, '')), img,
+                   crop: { x: 0.5, y: 0.42, s: 0.86 } });
+      if (--left === 0) render();
+    };
+    img.onerror = () => { if (--left === 0) render(); };
+    img.src = u;
+  });
+})();
+
+/* 이미 만들어 둔 삽화가 있으면 불러와서 이어서 작업 */
+window.addEventListener('load', () => {
+  if (typeof ART !== 'undefined' && Object.keys(ART).length) {
+    let left = Object.keys(ART).length;
+    Object.keys(ART).forEach(n => {
+      const img = new Image();
+      img.onload = () => {
+        const cv = document.createElement('canvas');
+        cv.width = W; cv.height = H;
+        cv.getContext('2d').drawImage(img, 0, 0);
+        items.push({ name: n, img, crop: { x: 0.5, y: 0.42, s: 0.86 }, canvas: cv, done: true });
+        if (--left === 0) render();
+      };
+      img.onerror = () => { if (--left === 0) render(); };
+      img.src = ART[n];
+    });
+  } else showMissing();
+});
+</script>
+</body>
+</html>

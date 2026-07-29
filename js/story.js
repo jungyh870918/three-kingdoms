@@ -328,6 +328,7 @@ const STORY_EVENTS = (() => {
         const me = pClan(st);
         const other = st.clans.find(c => c.alive && c.id !== me.id &&
           (['손권', '손책'].includes(c.ruler) || c.ruler === '유비'));
+        if (!me || !other) return;
         await UI.banner('손유동맹');
         await UI.speech('노숙', '조조가 형주를 삼키고 강을 내려오고 있습니다.\n한 쪽이 무너지면 다른 쪽도 없습니다.', `${other.ruler} 군의 사자`);
         if (await UI.confirm(`${UI.yl(other.ruler)}와 동맹을 맺겠습니까?`)) {
@@ -1293,6 +1294,495 @@ const STORY_EVENTS = (() => {
         c.troops = Math.max(0, c.troops - lost);
         c.loyal = clamp(c.loyal - 10, 0, 100);
         lines.push(`${UI.yl(cname(cid))}에서 남만의 봉기로 병사 ${UI.rd(lost)}명을 잃었습니다`);
+      },
+    },
+
+    /* ═══════════════════════════════════════════════════════════════
+     *  황건 · 후한 말
+     * ══════════════════════════════════════════════════════════════ */
+    {
+      id: 'hwangeon', title: '창천이 이미 죽었다',
+      cond: st => clanByRuler(st, '장각') && st.year <= 186 && pc(st) !== clanByRuler(st, '장각').id,
+      chance: () => 0.8,
+      run: async (st, lines) => {
+        await UI.banner('황건의 난');
+        await scenes([
+          ['장각', '창천은 이미 죽었고 황천이 마땅히 서리라.\n갑자년에 천하가 크게 길하리라!', '대현량사 장각'],
+          [pRuler(st), '누런 두건이 팔주에서 한꺼번에 일어났다.\n의병을 모아 향리를 지켜야 한다.', pRuler(st)],
+        ]);
+        if (await UI.confirm(UI.yl('의병을 모으겠습니까? (금 500 · 병사 증강)'))) {
+          const cid = capital(st);
+          if (cid && st.cities[cid].gold >= 500) {
+            st.cities[cid].gold -= 500;
+            st.cities[cid].troops += rr(3000, 7000);
+            st.cities[cid].train = clamp(st.cities[cid].train + 8, 0, 100);
+            await UI.anyKey('향리의 젊은이들이 창을 들고 모여들었습니다');
+          } else await UI.anyKey(UI.rd('금이 모자랍니다'));
+        }
+      },
+    },
+    {
+      id: 'janggak_death', title: '장각의 죽음',
+      cond: st => clanByRuler(st, '장각') && st.year >= 184 && alive(st, '장각'),
+      chance: () => 0.25,
+      run: async (st, lines) => {
+        const jg = clanByRuler(st, '장각');
+        await UI.banner('광종의 병상');
+        await scenes([
+          ['장각', '하늘이 나를 버리는가…\n황천은 아직 서지 못했거늘.', '장각 병상에서'],
+          ['황보숭', '괴수가 죽었다. 지금이다, 밀어붙여라!', '황보숭'],
+        ]);
+        Game.killGen('장각');
+        cities(st, jg.id).forEach(id => {
+          const c = st.cities[id];
+          c.troops = Math.floor(c.troops * 0.6);
+          c.loyal = clamp(c.loyal - 15, 0, 100);
+        });
+        Game.checkRulers();
+        lines.push(`${UI.rd('장각')}이 병으로 죽고 황건의 기세가 꺾였습니다`);
+      },
+    },
+    {
+      id: 'sipsangsi', title: '십상시의 난',
+      cond: st => clanByRuler(st, '하진') && st.year >= 185,
+      chance: () => 0.4,
+      run: async (st, lines) => {
+        const hj = clanByRuler(st, '하진');
+        await UI.banner('궁문이 닫히다');
+        await scenes([
+          ['하진', '환관을 뿌리 뽑으려면 지방의 군을 불러들여야 한다.', '하진'],
+          ['노식', '도끼로 파리를 잡자는 것입니다.\n그 군이 도성에 들면 누가 막겠습니까!', '노식 말리며'],
+          ['하진', '(궁문이 닫히고 칼날이 번뜩였다)', '십상시의 함정'],
+        ]);
+        Game.killGen('하진');
+        Game.checkRulers();
+        const d = clanByRuler(st, '동탁');
+        if (d) {
+          cities(st, d.id).forEach(id => { st.cities[id].train = clamp(st.cities[id].train + 10, 0, 100); });
+          d.relation[pc(st)] = clamp((d.relation[pc(st)] || 30) - 10, 0, 100);
+        }
+        lines.push(`${UI.rd('하진')}이 궁중에서 죽고 도성이 불탔습니다`);
+      },
+    },
+
+    /* ═══════════════════════════════════════════════════════════════
+     *  공손찬과 하북
+     * ══════════════════════════════════════════════════════════════ */
+    {
+      id: 'baekma', title: '백마의종',
+      cond: st => pRuler(st) === '공손찬' && cities(st, pc(st)).length >= 1,
+      chance: () => 0.7,
+      run: async (st, lines) => {
+        const cid = capital(st);
+        await UI.banner('백마의종');
+        await scenes([
+          ['공손찬', '흰 말만 골라 태워라.\n오환이 우리 깃발만 보고도 물러서게 하리라.', '공손찬'],
+          ['엄강', '변경의 오랑캐가 "백마장사를 피하라"며\n서로 이르고 다닌다 합니다.', '북방의 소문'],
+        ]);
+        if (cid) {
+          st.cities[cid].horses += rr(1500, 3500);
+          st.cities[cid].train = clamp(st.cities[cid].train + 12, 0, 100);
+        }
+        clanGens(st, pc(st)).forEach(g => { g.loyal = clamp(g.loyal + 5, 0, 100); });
+        lines.push(`${UI.gr('백마의종')}이 편성되어 기병이 크게 늘었습니다`);
+      },
+    },
+    {
+      id: 'gyegyo', title: '계교의 강노',
+      cond: st => {
+        const gs = clanByRuler(st, '공손찬'), wn = clanByRuler(st, '원소');
+        return gs && wn && adjacentTo(st, gs.id, wn.id) && alive(st, '국의');
+      },
+      chance: () => 0.4,
+      run: async (st, lines) => {
+        const gs = clanByRuler(st, '공손찬'), wn = clanByRuler(st, '원소');
+        await UI.banner('계교 — 큰 방패 뒤의 강노');
+        await scenes([
+          ['국의', '큰 방패 뒤에 강노 천 장을 엎드리게 하십시오.\n기병이 코앞에 닿을 때까지 쏘지 마십시오.', '국의의 계책'],
+          ['공손찬', '백마의종은 천하무적이다. 짓밟아라!', '공손찬'],
+          ['국의', '지금이다 — 쏘아라!', '강노 일제 사격'],
+        ]);
+        cities(st, gs.id).forEach(id => {
+          const c = st.cities[id];
+          c.troops = Math.floor(c.troops * 0.65);
+          c.horses = Math.floor(c.horses * 0.5);
+          c.train = clamp(c.train - 12, 0, 100);
+        });
+        cities(st, wn.id).forEach(id => { st.cities[id].train = clamp(st.cities[id].train + 6, 0, 100); });
+        gs.relation[wn.id] = 0; wn.relation[gs.id] = 0;
+        lines.push(`계교에서 ${UI.rd('백마의종')}이 강노에 부서졌습니다`);
+      },
+    },
+    {
+      id: 'yeokgyeong', title: '역경루',
+      cond: st => {
+        const gs = clanByRuler(st, '공손찬');
+        return gs && cities(st, gs.id).length <= 1 && st.year >= 197;
+      },
+      chance: () => 0.5,
+      run: async (st, lines) => {
+        const gs = clanByRuler(st, '공손찬');
+        await UI.banner('역경루의 불');
+        await scenes([
+          ['공손찬', '누각을 열 겹으로 쌓고 곡식을 삼백만 석 쌓았다.\n천하가 정해지기를 여기서 기다리겠다.', '공손찬'],
+          ['공손찬', '이제는 끝이구나.\n내 손으로 불을 놓으리라.', '스스로 불을 지르며'],
+        ]);
+        Game.killGen('공손찬');
+        Game.checkRulers();
+        lines.push(`${UI.rd('공손찬')}이 역경루에 불을 놓고 스스로 목숨을 끊었습니다`);
+      },
+    },
+
+    /* ═══════════════════════════════════════════════════════════════
+     *  관우 · 삼형제
+     * ══════════════════════════════════════════════════════════════ */
+    {
+      id: 'gwanwoo_uitak', title: '관우, 조조에게 의탁하다',
+      cond: st => {
+        const lb = st.clans.find(c => c.alive && c.ruler === '유비');
+        const cao = clanByRuler(st, '조조');
+        return lb && cao && clanOf(st, '관우') === lb.id && cities(st, lb.id).length <= 1 &&
+          adjacentTo(st, cao.id, lb.id) && st.year <= 205;
+      },
+      chance: () => 0.3,
+      run: async (st, lines) => {
+        const cao = clanByRuler(st, '조조');
+        await UI.banner('세 가지 조건');
+        await scenes([
+          ['관우', '항복하는 것은 한실이지 조공이 아니오.\n형수를 지킬 것이며, 형님의 소식을 들으면 곧바로 떠나겠소.\n이 셋을 받아들인다면 창을 놓겠소.', '관우 세 조건'],
+          ['조조', '좋다. 다 들어주마.\n저런 사람을 곁에 둘 수만 있다면.', '조조'],
+        ]);
+        const cs = cities(st, cao.id);
+        if (cs.length) join(st, '관우', cao.id, cs[0], 35);
+        setFlag(st, 'gwanwoo_cao');
+        await grant(st, '관우', '적토마', cao.id !== pc(st));
+        lines.push(`${UI.gr('관우')}가 조건을 걸고 조조에게 몸을 맡겼습니다`);
+      },
+    },
+    {
+      id: 'cheollihang', title: '천리행 — 다섯 관문',
+      cond: st => {
+        const lb = st.clans.find(c => c.alive && c.ruler === '유비');
+        return flag(st, 'gwanwoo_cao') && lb && alive(st, '관우') && clanOf(st, '관우') !== lb.id &&
+          since(st, 'gwanwoo_cao') >= 3;
+      },
+      chance: () => 0.5,
+      run: async (st, lines) => {
+        const lb = st.clans.find(c => c.alive && c.ruler === '유비');
+        await UI.banner('오관을 지나 여섯 장수를 베다');
+        await scenes([
+          ['관우', '형님이 하북에 계시다는 소식을 들었소.\n약속대로 떠나겠소이다.', '관우 인수를 걸어 두고'],
+          ['조조', '쫓지 마라.\n각기 제 주인을 위하는 것이다.', '조조 뒤에서'],
+        ]);
+        const cs = cities(st, lb.id);
+        if (cs.length) {
+          join(st, '관우', lb.id, cs[0], 100);
+          setFlag(st, 'gwanwoo_back');
+          lines.push(`${UI.gr('관우')}가 다섯 관문을 뚫고 유비에게 돌아갔습니다`);
+        }
+      },
+    },
+    {
+      id: 'goseong', title: '고성의 재회',
+      cond: st => {
+        const lb = st.clans.find(c => c.alive && c.ruler === '유비');
+        return flag(st, 'gwanwoo_back') && lb && clanOf(st, '관우') === lb.id && clanOf(st, '장비') === lb.id;
+      },
+      chance: () => 0.9,
+      run: async (st, lines) => {
+        const lb = st.clans.find(c => c.alive && c.ruler === '유비');
+        await UI.banner('고성의 재회');
+        await scenes([
+          ['장비', '형님이 조조에게 붙었다더니 무슨 낯으로 오셨소!', '장비 창을 겨누며'],
+          ['관우', '북소리 한 번 울리는 사이에\n저 추격군 장수의 목을 가져오겠네.', '관우'],
+          ['유비', '세 사람이 다시 모였으니\n이제 무엇이 두렵겠는가.', '삼형제 재회'],
+        ]);
+        clanGens(st, lb.id).forEach(g => { g.loyal = clamp(g.loyal + 12, 0, 100); });
+        ['유비', '관우', '장비'].forEach(n => { if (clanOf(st, n) === lb.id) st.gens[n].loyal = 100; });
+        cities(st, lb.id).forEach(id => { st.cities[id].train = clamp(st.cities[id].train + 8, 0, 100); });
+      },
+    },
+
+    /* ═══════════════════════════════════════════════════════════════
+     *  손씨의 약진 · 강하 공방
+     * ══════════════════════════════════════════════════════════════ */
+    {
+      id: 'gangdong', title: '소패왕의 강동 평정',
+      cond: st => {
+        const sc = clanByRuler(st, '손책');
+        if (!sc) return false;
+        return Game.ADJ && cities(st, sc.id).some(a => Game.ADJ[a].some(b => {
+          const o = st.cities[b].clan;
+          return o >= 0 && o !== sc.id && ['유요', '왕랑', '엄백호', '김선'].includes(st.clans[o].ruler);
+        }));
+      },
+      chance: () => 0.45,
+      run: async (st, lines) => {
+        const sc = clanByRuler(st, '손책');
+        const target = cities(st, sc.id).flatMap(a => Game.ADJ[a]).find(b => {
+          const o = st.cities[b].clan;
+          return o >= 0 && o !== sc.id && ['유요', '왕랑', '엄백호', '김선'].includes(st.clans[o].ruler);
+        });
+        if (!target) return;
+        await UI.banner('소패왕의 진격');
+        await scenes([
+          ['손책', '빌린 삼천으로 강동을 얻겠다.\n뒤를 돌아보지 마라!', '손책'],
+          ['주유', '백부의 이름만으로 성문이 열립니다.\n백성을 건드리지 말라는 군령이 먼저 도착했으니까요.', '주유'],
+        ]);
+        Game.captureCity(sc.id, target, Math.floor(st.cities[target].troops * 0.6), [], [], []);
+        st.cities[target].loyal = clamp(st.cities[target].loyal + 10, 0, 100);
+        Game.checkRulers();
+        lines.push(`${UI.gr('손책')}이 ${UI.yl(cname(target))}를 평정했습니다`);
+      },
+    },
+    {
+      id: 'hwangjo', title: '강하 공방 — 황조 토벌',
+      cond: st => {
+        const sn = st.clans.find(c => c.alive && ['손권', '손책'].includes(c.ruler));
+        const yp = clanByRuler(st, '유표');
+        return sn && yp && alive(st, '황조') && clanOf(st, '황조') === yp.id && adjacentTo(st, sn.id, yp.id);
+      },
+      chance: () => 0.4,
+      run: async (st, lines) => {
+        const sn = st.clans.find(c => c.alive && ['손권', '손책'].includes(c.ruler));
+        const yp = clanByRuler(st, '유표');
+        await UI.banner('아버지의 원수');
+        await scenes([
+          ['손권', '황조는 아버님을 쏘아 죽인 원수다.\n강하를 뭉개고 그 목을 가져오라.', '손권'],
+          ['감녕', '저는 황조 밑에 있으면서 배 한 척 얻지 못했습니다.\n강하의 물길은 제 손바닥 안에 있습니다.', '감녕 귀순하며'],
+        ]);
+        const gangha = st.gens['황조'].city;
+        if (st.cities[gangha].clan === yp.id) {
+          Game.captureCity(sn.id, gangha, Math.floor(st.cities[gangha].troops * 0.5), [], [], ['황조']);
+        }
+        if (alive(st, '감녕') && clanOf(st, '감녕') !== sn.id) {
+          const cs = cities(st, sn.id);
+          if (cs.length) join(st, '감녕', sn.id, cs[0], 80);
+        }
+        Game.checkRulers();
+        lines.push(`${UI.gr('손씨')}가 강하를 무너뜨리고 ${UI.rd('황조')}를 잡았습니다`);
+      },
+    },
+    {
+      id: 'hapbi', title: '합비 — 장료가 온다',
+      cond: st => {
+        const sn = st.clans.find(c => c.alive && ['손권', '손책'].includes(c.ruler));
+        if (!sn || !alive(st, '장료')) return false;
+        const cl = clanOf(st, '장료');
+        return cl >= 0 && cl !== sn.id && adjacentTo(st, sn.id, cl);
+      },
+      chance: () => 0.3, repeat: true, cool: 36,
+      run: async (st, lines) => {
+        const sn = st.clans.find(c => c.alive && ['손권', '손책'].includes(c.ruler));
+        await UI.banner('팔백 기의 새벽');
+        await scenes([
+          ['장료', '적이 진을 세우기 전에 기세를 꺾어야 한다.\n나를 따를 팔백을 고르라!', '장료'],
+          ['손권', '저것이 장문원인가…\n십만이 팔백에게 밀리다니!', '손권 언덕 위에서'],
+        ]);
+        cities(st, sn.id).forEach(id => {
+          const c = st.cities[id];
+          c.troops = Math.floor(c.troops * 0.88);
+          c.train = clamp(c.train - 8, 0, 100);
+        });
+        if (alive(st, '장료')) st.gens['장료'].loyal = clamp(st.gens['장료'].loyal + 8, 0, 100);
+        lines.push(`합비에서 ${UI.rd('장료')}가 오군을 뒤흔들었습니다`);
+      },
+    },
+
+    /* ═══════════════════════════════════════════════════════════════
+     *  남방 · 변경의 통치
+     * ══════════════════════════════════════════════════════════════ */
+    {
+      id: 'saseop', title: '교주의 사왕(士王)',
+      cond: st => clanOf(st, '사섭') >= 0 && st.year >= 190,
+      chance: () => 0.35, repeat: true, cool: 48,
+      run: async (st, lines) => {
+        const ci = clanOf(st, '사섭');
+        await UI.banner('남쪽으로 내려온 선비들');
+        await scenes([
+          ['사섭', '중원이 불타니 학문이 남으로 흐른다.\n오는 이를 막지 말고 밭과 집을 내어 주어라.', '교지태수 사섭'],
+          ['사섭', '북쪽에는 조공을 보내고 남쪽에는 학당을 세운다.\n그것으로 사십 년을 견뎌 왔다.', '사섭'],
+        ]);
+        cities(st, ci).forEach(id => {
+          const c = st.cities[id];
+          c.pop += rr(6000, 20000);
+          c.loyal = clamp(c.loyal + rr(6, 12), 0, 100);
+          c.tech = clamp(c.tech + rr(2, 6), 0, 100);
+          c.comm = clamp(c.comm + rr(2, 6), 0, 100);
+        });
+        if (ci === pc(st)) {
+          const pool = Object.values(st.gens).filter(g => g.clan === -1);
+          if (pool.length) { const f = pool[rnd(pool.length)]; f.found = true; f.city = st.gens['사섭'].city; }
+        }
+        lines.push(`${UI.gr('교주')}에 중원의 학자들이 모여들었습니다`);
+      },
+    },
+
+    /* ═══════════════════════════════════════════════════════════════
+     *  북벌과 수성
+     * ══════════════════════════════════════════════════════════════ */
+    {
+      id: 'jinchang', title: '진창 — 학소의 스무 날',
+      cond: st => {
+        if (!alive(st, '학소')) return false;
+        const hs = clanOf(st, '학소');
+        const ci = clanOf(st, '제갈량') >= 0 ? clanOf(st, '제갈량') : clanOf(st, '강유');
+        return hs >= 0 && ci >= 0 && hs !== ci && adjacentTo(st, hs, ci) && st.year >= 226;
+      },
+      chance: () => 0.5,
+      run: async (st, lines) => {
+        const hs = clanOf(st, '학소');
+        const ci = clanOf(st, '제갈량') >= 0 ? clanOf(st, '제갈량') : clanOf(st, '강유');
+        await UI.banner('진창성');
+        await scenes([
+          ['학소', '천 명으로 족하다.\n운제가 오면 불화살, 땅굴을 파면 가로 굴을 판다.', '학소'],
+          ['제갈량', '스무 날을 두드렸으나 성벽 한 자를 얻지 못했다…\n군량이 다했으니 물러선다.', '제갈량 탄식하며'],
+        ]);
+        cities(st, ci).forEach(id => {
+          const c = st.cities[id];
+          c.troops = Math.floor(c.troops * 0.9);
+          c.rice = Math.floor(c.rice * 0.85);
+        });
+        cities(st, hs).forEach(id => { st.cities[id].wall = clamp(st.cities[id].wall + 6, 0, 100); });
+        if (alive(st, '학소')) st.gens['학소'].loyal = 100;
+        lines.push(`${UI.gr('학소')}가 진창에서 촉의 대군을 막아냈습니다`);
+      },
+    },
+    {
+      id: 'samaui_su', title: '움직이지 않는 사마의',
+      cond: st => {
+        const sm = clanOf(st, '사마의');
+        const ci = clanOf(st, '제갈량');
+        return sm >= 0 && ci >= 0 && sm !== ci && adjacentTo(st, sm, ci) && st.year >= 231;
+      },
+      chance: () => 0.45, repeat: true, cool: 24,
+      run: async (st, lines) => {
+        const sm = clanOf(st, '사마의'), ci = clanOf(st, '제갈량');
+        await UI.banner('여자 옷을 받은 대장군');
+        await scenes([
+          ['제갈량', '싸우지 않겠다면 이 옷이라도 입으시오.\n(부인의 옷과 머리 장식을 보냈다)', '제갈량의 도발'],
+          ['사마의', '(웃으며 받아 들고) 승상은 요즘 잠은 잘 주무시는가?\n식사는 얼마나 하시는가?', '사마의'],
+          ['사마의', '먹는 것은 적고 하는 일은 많다니…\n오래 가지 못하겠구나. 문을 닫아걸어라.', '사마의'],
+        ]);
+        cities(st, ci).forEach(id => {
+          const c = st.cities[id];
+          c.rice = Math.floor(c.rice * 0.88);
+          c.train = clamp(c.train - 5, 0, 100);
+        });
+        cities(st, sm).forEach(id => { st.cities[id].wall = clamp(st.cities[id].wall + 4, 0, 100); });
+        lines.push(`사마의가 성문을 닫아걸어 촉군의 군량만 축났습니다`);
+      },
+    },
+    {
+      id: 'wiyeon_ran', title: '위연의 최후',
+      cond: st => flag(st, 'ojangwon') && alive(st, '위연') && clanOf(st, '위연') >= 0,
+      chance: () => 0.6,
+      run: async (st, lines) => {
+        const ci = clanOf(st, '위연');
+        await UI.banner('누가 감히 나를 죽이랴');
+        await scenes([
+          ['위연', '승상이 죽었다고 천하의 일이 끝나는가!\n내가 군을 이어 북벌을 계속하겠다.', '위연'],
+          ['마대', '(뒤에서) 누가 감히 나를 죽이랴 — 세 번 외쳐 보시오.', '마대'],
+        ]);
+        if (Math.random() < 0.6 && alive(st, '마대')) {
+          Game.killGen('위연');
+          lines.push(`${UI.rd('위연')}이 마대의 손에 죽었습니다`);
+        } else {
+          const cs = cities(st, ci);
+          if (cs.length > 1) {
+            const city = cs[cs.length - 1];
+            const nid = st.clans.length;
+            st.clans.push({
+              id: nid, ruler: '위연', color: CLAN_COLORS[nid % CLAN_COLORS.length],
+              isPlayer: false, alive: true, emperor: false, allies: {}, truce: {}, relation: {},
+            });
+            st.clans.forEach((x, i) => { if (i !== nid) { x.relation[nid] = rr(5, 20); st.clans[nid].relation[i] = rr(5, 20); } });
+            st.cities[city].gens.slice().forEach(n => {
+              if (n === '위연') return;
+              const refuge = cs.filter(x => x !== city);
+              if (refuge.length) Game.moveGen(n, refuge[0]); else leave(st, n);
+            });
+            st.cities[city].clan = nid;
+            join(st, '위연', nid, city, 100);
+            Game.assignOfficers(city);
+            Game.checkRulers();
+            lines.push(`${UI.rd('위연')}이 군을 이끌고 독립했습니다`);
+          }
+        }
+      },
+    },
+    {
+      id: 'gangyu_buk', title: '강유의 북벌',
+      cond: st => clanOf(st, '강유') >= 0 && st.year >= 240 &&
+        cities(st, clanOf(st, '강유')).includes(17),
+      chance: () => 0.4, repeat: true, cool: 30,
+      run: async (st, lines) => {
+        const ci = clanOf(st, '강유');
+        await UI.banner('아홉 번 중원으로');
+        await scenes([
+          ['강유', '승상께서 못다 이루신 뜻이 남았습니다.\n다시 기산으로 나갑니다.', '강유'],
+          ['장익', '나라는 작고 백성은 지쳤습니다.\n어찌 해마다 군을 내십니까…', '장익 말리며'],
+        ]);
+        const cs = cities(st, ci);
+        cs.forEach(id => {
+          const c = st.cities[id];
+          c.rice = Math.floor(c.rice * 0.9);
+          c.train = clamp(c.train + 8, 0, 100);
+          c.loyal = clamp(c.loyal - 4, 0, 100);
+        });
+        if (cs.includes(17)) st.cities[17].troops += rr(3000, 8000);
+        lines.push(`${UI.gr('강유')}가 다시 기산으로 군을 냈습니다`);
+      },
+    },
+    {
+      id: 'jin_seonyang', title: '위에서 진으로',
+      cond: st => {
+        const ci = clanOf(st, '사마소') >= 0 ? clanOf(st, '사마소') : clanOf(st, '사마사');
+        return ci >= 0 && st.clans[ci] && ['사마사', '사마소', '사마의'].includes(st.clans[ci].ruler) &&
+          cities(st, ci).length >= 18 && st.year >= 258;
+      },
+      chance: () => 0.6,
+      run: async (st, lines) => {
+        const ci = clanOf(st, '사마소') >= 0 ? clanOf(st, '사마소') : clanOf(st, '사마사');
+        const cl = st.clans[ci];
+        await UI.banner('사마소의 마음');
+        await scenes([
+          [cl.ruler, '사마소의 마음은 길 가는 사람도 안다 하더군.\n그렇다면 굳이 감출 것도 없겠지.', cl.ruler],
+        ]);
+        cl.emperor = true;
+        cities(st, ci).forEach(id => { st.cities[id].loyal = clamp(st.cities[id].loyal + 5, 0, 100); });
+        clanGens(st, ci).forEach(g => { g.loyal = clamp(g.loyal + 5, 0, 100); });
+        lines.push(`${UI.rd(cl.ruler)}가 위의 실권을 모두 거두어 왕을 칭했습니다`);
+      },
+    },
+    {
+      id: 'eumpyeong', title: '음평의 샛길',
+      cond: st => {
+        const ci = clanOf(st, '등애');
+        const chok = st.clans.find(c => c.alive && ['유선', '강유', '제갈량'].includes(c.ruler));
+        return ci >= 0 && chok && ci !== chok.id && adjacentTo(st, ci, chok.id) &&
+          cities(st, chok.id).includes(41) && st.year >= 255;
+      },
+      chance: () => 0.35,
+      run: async (st, lines) => {
+        const ci = clanOf(st, '등애');
+        const chok = st.clans.find(c => c.alive && ['유선', '강유', '제갈량'].includes(c.ruler));
+        await UI.banner('음평 칠백 리');
+        await scenes([
+          ['등애', '길이 끊긴 곳에서는 담요에 몸을 말고 굴러 내려간다.\n뒤를 돌아볼 생각은 버려라.', '등애'],
+          ['제갈첨', '(면죽에서) 물러설 곳이 없다.\n승상의 이름에 부끄럽지 않게 싸우자!', '면죽의 방어'],
+        ]);
+        const target = cities(st, chok.id).includes(41) ? 41 : cities(st, chok.id)[0];
+        const c = st.cities[target];
+        c.troops = Math.floor(c.troops * 0.4);
+        c.loyal = clamp(c.loyal - 20, 0, 100);
+        if (Math.random() < 0.6) {
+          Game.captureCity(ci, target, rr(4000, 9000), ['등애'], [], []);
+          Game.checkRulers();
+          lines.push(`${UI.rd('등애')}가 음평을 넘어 ${UI.yl(cname(target))}를 급습해 함락시켰습니다`);
+        } else {
+          lines.push(`${UI.rd('등애')}의 기습을 간신히 막아냈습니다`);
+        }
       },
     },
   ];

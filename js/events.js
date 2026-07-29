@@ -634,6 +634,7 @@ const Events = (() => {
         const me = pClan(st);
         const targets = st.clans.filter(t => t.alive && t.id !== cl.id && t.id !== me.id &&
           cities(st, t.id).some(a => Game.ADJ[a].some(b => st.cities[b].clan === me.id)));
+        if (!targets.length) return;
         const tg = targets[rnd(targets.length)];
         await UI.banner(`${cl.ruler} 군의 제안`);
         await UI.speech(cl.ruler,
@@ -737,6 +738,7 @@ const Events = (() => {
         const me = pClan(st);
         const cand = clanGens(st, cl.id).filter(g => g.loyal < 45 && g.name !== cl.ruler)
           .sort((a, b) => a.loyal - b.loyal)[0];
+        if (!cand) return;
         const cid = capital(st); if (!cid) return;
         const price = rr(400, 1500);
         await UI.banner('은밀한 서신');
@@ -829,6 +831,7 @@ const Events = (() => {
       run: async (st, cl) => {
         const me = pClan(st);
         const targets = st.clans.filter(t => t.alive && t.id !== cl.id && t.id !== me.id && adjacentTo(st, me.id, t.id));
+        if (!targets.length) return;
         const tg = targets[rnd(targets.length)];
         const pay = rr(400, 1600);
         await UI.banner('길을 빌려 달라');
@@ -976,7 +979,7 @@ const Events = (() => {
       if (bag.length) {
         const [d, cl] = bag[rnd(bag.length)];
         (st.hist || (st.hist = [])).push([st.year, st.month, `${cl.ruler} 군의 사자가 오다`]);
-        await d.run(st, cl);
+        try { await d.run(st, cl); } catch (e) { /* 사자 하나가 넘어져도 진행 */ }
       }
     }
     if (st.gameOver) return;

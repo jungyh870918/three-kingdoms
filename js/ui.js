@@ -9,12 +9,54 @@ const UI = (() => {
   const center = $('#center');
   const mapCv = $('#map');
 
-  /* ── 화면 맞춤 ──────────────────────────────────────────────────── */
+  /* ── 화면 맞춤 ──────────────────────────────────────────────────────
+   *  스테이지(1280x800)를 화면에 꽉 채우고 정중앙에 놓는다.
+   *  세로 화면(폰)에서는 90도 돌려서 채운다 — 원작이 가로 비율이라 그대로
+   *  두면 위아래로 검은 여백만 남는다.
+   * ------------------------------------------------------------------ */
+  const view = { s: 1, tx: 0, ty: 0, rot: false };
+
   function fit() {
-    const s = Math.min(window.innerWidth / 1280, window.innerHeight / 800);
-    stage.style.transform = `scale(${s})`;
+    const vv = window.visualViewport;
+    const vw = Math.round(vv ? vv.width : window.innerWidth);
+    const vh = Math.round(vv ? vv.height : window.innerHeight);
+
+    const sFlat = Math.min(vw / 1280, vh / 800);
+    const sRot = Math.min(vw / 800, vh / 1280);
+    const rot = sRot > sFlat;                      /* 세로 화면이면 돌린다 */
+    const s = rot ? sRot : sFlat;
+
+    if (rot) {
+      /* rotate(90deg) 뒤 (x,y) → (-y, x) 이므로 오른쪽 위를 원점으로 잡는다 */
+      view.tx = (vw + 800 * s) / 2;
+      view.ty = (vh - 1280 * s) / 2;
+      stage.style.transform =
+        `translate(${view.tx}px,${view.ty}px) rotate(90deg) scale(${s})`;
+    } else {
+      view.tx = (vw - 1280 * s) / 2;
+      view.ty = (vh - 800 * s) / 2;
+      stage.style.transform = `translate(${view.tx}px,${view.ty}px) scale(${s})`;
+    }
+    view.s = s;
+    view.rot = rot;
   }
+
+  /* 화면 좌표 → 스테이지 내부 좌표(1280x800 기준) */
+  function toStage(cx, cy) {
+    const u = cx - view.tx, v = cy - view.ty;
+    return view.rot
+      ? { x: v / view.s, y: -u / view.s }
+      : { x: u / view.s, y: v / view.s };
+  }
+
   window.addEventListener('resize', fit);
+  window.addEventListener('orientationchange', () => { fit(); setTimeout(fit, 300); });
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', fit);
+    window.visualViewport.addEventListener('scroll', fit);
+  }
+  /* 모바일 브라우저는 주소창이 접히며 크기가 늦게 확정된다 */
+  window.addEventListener('load', () => { fit(); setTimeout(fit, 300); });
 
   /* ── 입력 ───────────────────────────────────────────────────────── */
   let waiter = null;
@@ -26,11 +68,20 @@ const UI = (() => {
     e.preventDefault();
     send({ t: 'key', k: e.key });
   });
+  let touched = 0;
   stage.addEventListener('mousedown', e => {
-    const r = stage.getBoundingClientRect();
-    const s = r.width / 1280;
-    send({ t: 'click', x: (e.clientX - r.left) / s, y: (e.clientY - r.top) / s, target: e.target });
+    if (Date.now() - touched < 700) return;        /* 터치가 만든 가짜 클릭 */
+    const p = toStage(e.clientX, e.clientY);
+    send({ t: 'click', x: p.x, y: p.y, target: e.target });
   });
+  stage.addEventListener('touchstart', e => {
+    touched = Date.now();
+    const t = e.changedTouches[0];
+    if (!t) return;
+    e.preventDefault();
+    const p = toStage(t.clientX, t.clientY);
+    send({ t: 'click', x: p.x, y: p.y, target: t.target || e.target });
+  }, { passive: false });
   stage.addEventListener('contextmenu', e => { e.preventDefault(); send({ t: 'key', k: 'Escape' }); });
 
   const isCancel = ev => ev.t === 'key' && ['Escape', 'Backspace', 'x', 'X'].includes(ev.k);
@@ -339,6 +390,8 @@ const UI = (() => {
         ${(opts && opts.items && opts.items.length)
           ? `<div class="ex ho">소지 : ${opts.items.map(n => `${n}${TREASURES[n] ? `(${TREASURES[n].kind})` : ''}`).join('　')}</div>` : ''}
         <div class="tx">${b[1]}</div>
+        ${(typeof LORE !== 'undefined' && LORE[name])
+          ? `<div class="lore"><b>정사에서는</b>\n${LORE[name]}</div>` : ''}
       </div>`;
     center.appendChild(el);
     Portrait.draw(el.querySelector('canvas'), name, {});

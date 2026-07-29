@@ -15,9 +15,12 @@
 <body>
 <div id="viewport"><div id="grid"></div></div>
 <script src="../js/data.js"></script>
+<script src="../js/faces.js"></script>
 <script src="../js/portrait.js"></script>
 <script>
-  const names = Object.keys(GENERALS);
+  const q = new URLSearchParams(location.search);
+  const names = q.get('only') ? q.get('only').split(',')
+    : q.get('named') ? Object.keys(FACES) : Object.keys(GENERALS);
   document.getElementById('grid').innerHTML = names.map(n =>
     `<span class="cell"><canvas width="95" height="110" data-n="${n}"></canvas><div>${n}</div></span>`).join('');
   document.fonts.ready.then(() => {

@@ -24,9 +24,16 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 html, body {
+  position: fixed;
+  inset: 0;
+  width: 100%;
   height: 100%;
   background: #000;
   overflow: hidden;
+  touch-action: none;
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
   font-family: 'Galmuri14', 'Galmuri11', 'DungGeunMo', monospace;
   -webkit-font-smoothing: none;
   font-smooth: never;
@@ -35,14 +42,16 @@ html, body {
   user-select: none;
 }
 
-#viewport { position: fixed; inset: 0; display: grid; place-items: center; }
+#viewport { position: fixed; inset: 0; overflow: hidden; }
 
 #stage {
-  position: relative;
+  position: absolute;
+  left: 0;
+  top: 0;
   width: 1280px;
   height: 800px;
   background: #000048;
-  transform-origin: center center;
+  transform-origin: 0 0;
   overflow: hidden;
   font-size: 28px;
   line-height: 34px;
@@ -223,16 +232,22 @@ canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edge
   text-shadow: 4px 4px 0 #8c2000;
 }
 .biopane {
-  left: 60px; top: 90px; width: 980px; min-height: 300px;
-  display: flex; gap: 24px; padding: 16px 20px;
+  left: 24px; top: 46px; width: 1232px; max-height: 726px; overflow: hidden;
+  display: flex; gap: 20px; padding: 14px 18px;
 }
-.biopane canvas { width: 190px; height: 220px; flex: none; }
-.biopane .bd { flex: 1; }
-.biopane .nm { font-size: 32px; line-height: 42px; }
-.biopane .st { font-size: 24px; line-height: 34px; color: var(--white); margin: 6px 0 4px; }
+.biopane canvas { width: 171px; height: 198px; flex: none; }
+.biopane .bd { flex: 1; min-width: 0; }
+.biopane .nm { font-size: 30px; line-height: 38px; }
+.biopane .st { font-size: 21px; line-height: 29px; color: var(--white); margin: 4px 0 2px; }
 .biopane .st b { color: var(--yellow); font-weight: normal; }
-.biopane .ex { font-size: 22px; line-height: 30px; margin-bottom: 6px; }
+.biopane .ex { font-size: 20px; line-height: 27px; margin-bottom: 4px; }
 .biopane .tx {
-  font-size: 25px; line-height: 38px; white-space: pre-line;
-  border-top: 2px solid var(--navy-lt); padding-top: 10px; color: #e8e8ff;
+  font-size: 22px; line-height: 31px; white-space: pre-line;
+  border-top: 2px solid var(--navy-lt); padding-top: 8px; color: #e8e8ff;
 }
+
+.biopane .lore {
+  margin-top: 8px; padding-top: 6px; border-top: 2px solid var(--brd-dk);
+  font-size: 20px; line-height: 27px; color: #ffd9a0; white-space: pre-line;
+}
+.biopane .lore b { color: var(--orange); font-weight: normal; }

@@ -8,6 +8,8 @@
 
   /* 폰트가 준비되면 캔버스 글자도 도트로 찍힌다 */
   try { await document.fonts.ready; } catch (e) { /* noop */ }
+  /* 준비된 인물 삽화가 있으면 먼저 읽어 둔다 */
+  try { await Portrait.preload(); } catch (e) { /* noop */ }
 
   /* 배경 지도(타이틀용) */
   const dummy = {
@@ -91,10 +93,12 @@
     /* 시나리오 */
     let si = preset;
     if (si === undefined) {
-      const items = SCENARIOS.map((s, i) => ({ label: `${i + 1} ${s.year}년 ${s.title}` }));
-      items.push({ label: `${SCENARIOS.length + 1} 기록 불러오기` });
-      UI.msg(UI.cy('시나리오를 고르십시오'));
-      si = await UI.menu(items, { title: '시나리오', x: 440, y: 260, width: 420, noCancel: true });
+      const order = SCENARIOS.map((s, i) => i).sort((a, b) => SCENARIOS[a].year - SCENARIOS[b].year);
+      const items = order.map((idx, k) => ({ label: `${String(k + 1).padStart(2, ' ')} ${SCENARIOS[idx].year}년  ${SCENARIOS[idx].title}` }));
+      items.push({ label: ` ${SCENARIOS.length + 1} 기록 불러오기` });
+      UI.msg(UI.cy('시나리오를 고르십시오  (↑↓ 선택 / Enter 결정)'));
+      const pick = await UI.menu(items, { title: '시나리오', x: 390, y: 52, width: 500, noCancel: true });
+      si = pick === SCENARIOS.length ? SCENARIOS.length : order[pick];
       if (si === SCENARIOS.length) return await loadGame();
       const sc = SCENARIOS[si];
       await UI.speech(sc.clans[0][0], sc.desc, `${sc.year}년 ${sc.title}`);
