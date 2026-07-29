@@ -46,14 +46,17 @@ const Battle = (() => {
   function place(units, side, city, defCity) {
     const arr = [];
     units.forEach((u, i) => {
-      const lead = u.name ? S(u.name)[4] : 40;
-      const navy = u.name ? S(u.name)[5] : 40;
+      const bo = u.bonus || {};
+      const lead = (u.name ? S(u.name)[4] : 40) + (bo.l || 0);
+      const navy = (u.name ? S(u.name)[5] : 40) + (bo.n || 0);
       const mo = clamp(58 + (u.train || 50) / 3 + (u.name ? S(u.name)[3] / 10 : 0) + (side === 'D' ? 8 : 0), 20, 100);
       arr.push({
         side, name: u.name, faceless: !u.name,
         troops: u.troops, max: u.troops, morale: Math.round(mo),
         train: u.train || 50, weapon: u.weapon || '보병',
-        lead, navy, war: u.name ? S(u.name)[0] : 45, int: u.name ? S(u.name)[1] : 40,
+        lead, navy, bonus: bo,
+        war: (u.name ? S(u.name)[0] : 45) + (bo.w || 0),
+        int: (u.name ? S(u.name)[1] : 40) + (bo.i || 0),
         x: side === 'A' ? (i % 2) : 15 - (i % 2),
         y: side === 'A' ? 1 + i * 2 % ROWS : Math.min(ROWS - 1, 2 + i),
         acted: false, alive: true,
@@ -154,7 +157,8 @@ const Battle = (() => {
     const u = B.sel || B.hover;
     UI.$('#warhud').innerHTML = `
       <div class="col" style="width:520px;flex:none">${u && !u.faceless
-        ? `<span class="hy">${u.name}</span>　무력 ${S(u.name)[0]}　지력 ${S(u.name)[1]}　육지 ${S(u.name)[4]}　수지 ${S(u.name)[5]}`
+        ? `<span class="hy">${u.name}</span>　무력 ${u.war}　지력 ${u.int}　육지 ${u.lead}　수지 ${u.navy}` +
+          (u.bonus && Object.keys(u.bonus).length ? ' <span class="ho">＊보물</span>' : '')
         : '<span class="hi">부대를 고르시오</span>'}
         ${u ? `<br>병사 <span class="hy">${u.troops}</span>　사기 <span class="hg">${u.morale}</span>　훈련 ${u.train}　${u.weapon}` : ''}</div>
       <div class="col" style="flex:1">${msg || ''}</div>`;
@@ -226,7 +230,7 @@ const Battle = (() => {
   /* ── 일기토 ─────────────────────────────────────────────────────── */
   async function duel(a, d, log) {
     if (a.faceless || d.faceless) return;
-    const aw = S(a.name)[0] + rr(0, 30), dw = S(d.name)[0] + rr(0, 30);
+    const aw = a.war + rr(0, 30), dw = d.war + rr(0, 30);
     await say(`${UI.yl(a.name)} 과 ${UI.yl(d.name)}의 일기토!`);
     const win = aw >= dw ? a : d, lose = aw >= dw ? d : a;
     win.morale = clamp(win.morale + 14, 0, 100);

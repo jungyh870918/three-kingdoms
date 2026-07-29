@@ -35,6 +35,23 @@
   } else if (q.get('dev')) {
     $('#title').classList.add('hidden');
     const st = Game.newGame(+(q.get('scen') || 0), +(q.get('clan') || 0));
+    /* 이벤트 미리보기 :  &event=samgo  /  &bio=제갈량 */
+    if (q.get('event')) {
+      Render.bind(st); UI.date(st); UI.market(st.market); UI.cmdbar(-1);
+      const ev = Events.STORY.find(e => e.id === q.get('event'));
+      if (ev) await ev.run(st);
+    }
+    if (q.get('diplo')) {
+      Render.bind(st); UI.date(st); UI.market(st.market); UI.cmdbar(-1);
+      const d = Events.DIPLO.find(e => e.id === q.get('diplo'));
+      const list = d ? d.pick(st) : [];
+      if (d && list.length) await d.run(st, list[0]);
+      else UI.msg(UI.rd('조건에 맞는 세력이 없습니다'));
+    }
+    if (q.get('bio')) {
+      Render.bind(st); UI.cmdbar(-1);
+      await UI.bio(q.get('bio'), '열전 미리보기');
+    }
     Render.bind(st);
     UI.date(st); UI.market(st.market);
     UI.face(st.clans[st.playerClan].ruler, true);
@@ -100,7 +117,8 @@
       pane.innerHTML = `<div class="rw">${view.map((cl, k) => {
         const idx = page * PER + k;
         const cs = Game.clanCities(idx);
-        const home = cs.length ? CITIES[cs[0] - 1].name : '－';
+        const seat = cs.find(id => st.cities[id].gens.includes(cl.ruler)) || cs[0];
+        const home = seat ? CITIES[seat - 1].name : '－';
         return `<div class="card ${k === sel ? 'sel' : ''}" data-i="${idx}">
           <canvas width="95" height="110"></canvas>
           <div class="nm">${idx + 1}.${cl.ruler}</div>
@@ -113,7 +131,7 @@
       });
       const cur = clans[page * PER + sel];
       const cs = Game.clanCities(page * PER + sel);
-      st.cursorCity = cs[0] || null;
+      st.cursorCity = cs.find(id => st.cities[id].gens.includes(cur.ruler)) || cs[0] || null;
       Render.now();
       UI.msg(`게임자 1은 누구를 선택하겠습니까(1-${clans.length})?  ${UI.yl(cur.ruler)}  ` +
         UI.cy(`도시 ${cs.length} / 무장 ${Game.clanGens(page * PER + sel).length}`), true);

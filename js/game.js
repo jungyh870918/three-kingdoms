@@ -8,6 +8,25 @@ const Game = (() => {
   const rr = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const S = name => GENERALS[name] || [40, 40, 40, 40, 40, 40, 5, 1];
+  /* 보물 보정을 더한 실제 능력  idx: 0무력 1지력 2정치 3매력 4육지 5수지 */
+  const BKEY = { 0: 'w', 1: 'i', 2: 'p', 3: 'c', 4: 'l', 5: 'n' };
+  function stat(name, idx) {
+    const b = st && st.gens[name] && st.gens[name].bonus;
+    return S(name)[idx] + ((b && b[BKEY[idx]]) || 0);
+  }
+  /* 보물을 준다 */
+  function grant(name, item) {
+    const g = st.gens[name], t = TREASURES[item];
+    if (!g || !t) return false;
+    g.items = g.items || [];
+    if (g.items.includes(item)) return false;
+    g.items.push(item);
+    g.bonus = g.bonus || {};
+    ['w', 'i', 'p', 'c', 'l', 'n'].forEach(k => { if (t[k]) g.bonus[k] = (g.bonus[k] || 0) + t[k]; });
+    g.loyal = clamp(g.loyal + 5, 0, 100);
+    return true;
+  }
+  const itemsOf = name => (st.gens[name] && st.gens[name].items) || [];
   const cname = id => `${id}.${CITIES[id - 1].name}`;
 
   const ADJ = {}, SEAROUTE = {};
@@ -25,7 +44,7 @@ const Game = (() => {
       scen: scenIdx, year: sc.year, month: sc.month, seasonIdx: ((sc.month - 1) / 3) | 0,
       playerClan: playerClanIdx, clans: [], cities: {}, gens: {},
       market: { riceBuy: 100, riceSell: 70, bow: 60, cbow: 90, horse: 50 },
-      cursorCity: null, blink: true, marchArrow: null, hist: [],
+      cursorCity: null, blink: true, marchArrow: null, hist: [], flags: {},
     };
 
     /* 도시 */
@@ -57,6 +76,8 @@ const Game = (() => {
       (place || []).forEach(([cid, names]) => {
         names.split(' ').filter(Boolean).forEach(nm => {
           if (!GENERALS[nm] || st.gens[nm]) return;
+          const L = LIFE[nm];
+          if (L && L[1] && L[1] < st.year) return;          // 이미 세상을 떠난 인물
           st.gens[nm] = {
             name: nm, clan: i, city: cid, acted: false,
             loyal: nm === ruler ? 100 : clamp(60 + S(nm)[6] * 3 + rr(-6, 8), 40, 99),
@@ -76,9 +97,12 @@ const Game = (() => {
       });
     });
 
-    /* 재야 무장 */
+    /* 재야 무장 — 아직 등장하지 않았거나 이미 죽은 인물은 뺀다 */
     Object.keys(GENERALS).forEach(nm => {
       if (st.gens[nm]) return;
+      const L = LIFE[nm] || [0, 0];
+      if (L[0] && L[0] > st.year) return;
+      if (L[1] && L[1] < st.year) return;
       const home = S(nm)[7];
       st.gens[nm] = { name: nm, clan: -1, city: st.cities[home] ? home : 1, acted: false, loyal: 0 };
     });
@@ -105,13 +129,17 @@ const Game = (() => {
     c.advisorName = rest.length ? rest.slice().sort((a, b) => S(b)[1] - S(a)[1])[0] : null;
   }
 
+  /* 무장을 지금 속한 도시 명단에서 안전하게 뺀다 */
+  function removeFromCity(name) {
+    CITIES.forEach(d => {
+      const arr = st.cities[d.id].gens, i = arr.indexOf(name);
+      if (i >= 0) { arr.splice(i, 1); assignOfficers(d.id); }
+    });
+  }
+
   function moveGen(name, toCity, toClan) {
     const g = st.gens[name];
-    if (g.clan >= 0 && st.cities[g.city]) {
-      const arr = st.cities[g.city].gens;
-      const i = arr.indexOf(name); if (i >= 0) arr.splice(i, 1);
-      assignOfficers(g.city);
-    }
+    removeFromCity(name);
     g.city = toCity;
     if (toClan !== undefined) g.clan = toClan;
     if (g.clan >= 0) { st.cities[toCity].gens.push(name); assignOfficers(toCity); }
@@ -252,6 +280,7 @@ const Game = (() => {
     const per = Math.floor(n / units.length);
     const atkUnits = units.map((nm, k) => ({
       name: nm, troops: per, weapon: pickWeapon(c, k), train: c.train,
+      bonus: st.gens[nm].bonus || null,
     }));
     units.forEach(nm => { st.gens[nm].acted = true; });
     c.troops -= n;
@@ -275,7 +304,7 @@ const Game = (() => {
     const defUnits = dgens.length
       ? dgens.map((nm, k) => ({
           name: nm, troops: Math.max(300, Math.floor(d.troops / dgens.length)),
-          weapon: pickWeapon(d, k), train: d.train,
+          weapon: pickWeapon(d, k), train: d.train, bonus: st.gens[nm].bonus || null,
         }))
       : [];
 
@@ -301,7 +330,9 @@ const Game = (() => {
 
     if (res.winner === 'A') {
       const dead = res.dead.D, cap = res.captured;
+      res.dead.A.forEach(nm => killGen(nm));
       captureCity(atkClan, toCity, backTroops, survA.map(u => u.name), cap, dead);
+      st.hist.push([st.year, st.month, `${st.clans[atkClan].ruler} 군이 ${cname(toCity)}를 함락`]);
       const lines = [`${UI.yl(cname(toCity))} 함락! ${UI.gr(st.clans[atkClan].ruler)} 군이 성을 차지했습니다`];
       if (cap.length) lines.push(`${UI.og(cap.join('  '))} 를 포로로 잡았습니다`);
       if (dead.length) lines.push(`${UI.rd(dead.join('  '))} 가 전사했습니다`);
@@ -311,6 +342,7 @@ const Game = (() => {
       const f = st.cities[fromCity];
       if (f.clan === atkClan) f.troops += backTroops;
       res.dead.A.forEach(nm => killGen(nm));
+      res.dead.D.forEach(nm => killGen(nm));
       res.captured.forEach(nm => { if (st.gens[nm]) { st.gens[nm].clan = -3; st.gens[nm].city = toCity; d.prisoners.push(nm); } });
       const lines = [`${UI.rd(cname(toCity) + ' 공략 실패')}. 군은 물러났습니다`];
       if (res.dead.A.length) lines.push(`${UI.rd(res.dead.A.join('  '))} 가 전사했습니다`);
@@ -319,6 +351,8 @@ const Game = (() => {
     st.cities[fromCity] && assignOfficers(fromCity);
     assignOfficers(toCity);
     checkClanDeath();
+    const succ = checkRulers();
+    if (succ.length) await UI.report(succ);
     refresh(st.cursorCity);
     return res;
   }
@@ -329,10 +363,7 @@ const Game = (() => {
       const arr = st.cities[d.id].prisoners, i = arr.indexOf(nm);
       if (i >= 0) arr.splice(i, 1);
     });
-    if (g.clan >= 0 && st.cities[g.city]) {
-      const arr = st.cities[g.city].gens, i = arr.indexOf(nm);
-      if (i >= 0) arr.splice(i, 1);
-    }
+    removeFromCity(nm);
     delete st.gens[nm];
   }
 
@@ -344,14 +375,13 @@ const Game = (() => {
     c.gens.slice().forEach(nm => {
       if (!st.gens[nm]) return;
       if ((captured || []).includes(nm)) {
+        removeFromCity(nm);
         st.gens[nm].clan = -3; st.gens[nm].city = cid;
-        const i = c.gens.indexOf(nm); c.gens.splice(i, 1);
         c.prisoners.push(nm);
       } else {
         const refuge = clanCities(oldClan).filter(x => x !== cid);
-        const i = c.gens.indexOf(nm); c.gens.splice(i, 1);
-        if (refuge.length) { st.gens[nm].city = refuge[0]; st.cities[refuge[0]].gens.push(nm); assignOfficers(refuge[0]); }
-        else { st.gens[nm].clan = -1; st.gens[nm].loyal = 0; }   // 세력 멸망 → 재야
+        if (refuge.length) { moveGen(nm, refuge[0]); }
+        else { removeFromCity(nm); st.gens[nm].clan = -1; st.gens[nm].loyal = 0; }   // 세력 멸망 → 재야
       }
     });
     c.clan = newClan;
@@ -365,12 +395,52 @@ const Game = (() => {
     c.governor = null; assignOfficers(cid);
   }
 
+  /* 군주가 죽거나 사로잡히면 후계자를 세운다 */
+  function checkRulers() {
+    const lines = [];
+    st.clans.forEach((cl, i) => {
+      if (!cl.alive) return;
+      const r = st.gens[cl.ruler];
+      if (r && r.clan === i) return;
+      const pool = clanGens(i);
+      if (!pool.length) {                       // 대를 이을 사람이 없으면 세력이 흩어진다
+        cl.alive = false;
+        clanCities(i).forEach(cid => { st.cities[cid].clan = -1; st.cities[cid].governor = null; });
+        lines.push(`${UI.rd(cl.ruler + ' 군')}은 뒤를 이을 사람이 없어 흩어졌습니다`);
+        return;
+      }
+      let heir = HEIRS[cl.ruler];
+      if (!heir || !st.gens[heir] || st.gens[heir].clan !== i) {
+        heir = pool.slice().sort((a, b) =>
+          (S(b.name)[3] + S(b.name)[2] + b.loyal) - (S(a.name)[3] + S(a.name)[2] + a.loyal))[0].name;
+      }
+      const fallen = cl.ruler;
+      cl.ruler = heir;
+      st.gens[heir].loyal = 100;
+      pool.forEach(g => { if (g.name !== heir) g.loyal = clamp(g.loyal - rr(3, 12), 0, 100); });
+      clanCities(i).forEach(cid => assignOfficers(cid));
+      lines.push(`${UI.rd(fallen)}를 잃은 군은 ${UI.yl(heir)}(이)가 뒤를 이었습니다`);
+    });
+    return lines;
+  }
+
+  /* 항복 — 도시와 무장을 통째로 넘긴다 */
+  function surrenderTo(fromClan, toClan) {
+    clanCities(fromClan).forEach(id => { st.cities[id].clan = toClan; });
+    clanGens(fromClan).slice().forEach(g => {
+      if (Math.random() < 0.6) { g.clan = toClan; g.loyal = rr(40, 70); }   // 새 주인을 섬긴다
+      else { removeFromCity(g.name); g.clan = -1; g.loyal = 0; }            // 은거한다
+    });
+    CITIES.forEach(d => { if (st.cities[d.id].clan === toClan) assignOfficers(d.id); });
+    if (st.clans[fromClan]) st.clans[fromClan].alive = false;
+  }
+
   function checkClanDeath() {
     st.clans.forEach((cl, i) => {
       if (!cl.alive) return;
       if (clanCities(i).length === 0) {
         cl.alive = false;
-        clanGens(i).forEach(g => { g.clan = -1; g.loyal = 0; });
+        clanGens(i).forEach(g => { removeFromCity(g.name); g.clan = -1; g.loyal = 0; });
       }
     });
   }
@@ -435,7 +505,7 @@ const Game = (() => {
         - S(who)[6] / 34 + (isPri ? 0.06 : 0);
       if (S(who)[0] > 90 || S(who)[1] > 90) ch -= 0.12;
       if (Math.random() < clamp(ch, 0.05, 0.9)) {
-        if (isPri) { const i2 = c.prisoners.indexOf(who); c.prisoners.splice(i2, 1); }
+        if (isPri) { const i2 = c.prisoners.indexOf(who); if (i2 >= 0) c.prisoners.splice(i2, 1); }
         tg.clan = st.playerClan; tg.city = cid; tg.acted = true; tg.found = false;
         tg.loyal = clamp(55 + S(who)[6] * 2 + rr(0, 10), 40, 90);
         c.gens.push(who); assignOfficers(cid);
@@ -479,8 +549,8 @@ const Game = (() => {
       if (!who) return;
       if (!await UI.confirm(`${who}를 정말 추방합니까?`)) return;
       const g = st.gens[who];
-      const arr = c.gens; arr.splice(arr.indexOf(who), 1);
-      g.clan = -1; g.loyal = 0; g.found = false; assignOfficers(cid);
+      removeFromCity(who);
+      g.clan = -1; g.loyal = 0; g.found = false;
       await UI.anyKey(`${UI.gr(who)}는 어디론가 사라졌습니다`);
     }
   }
@@ -533,8 +603,9 @@ const Game = (() => {
   async function cmdInfo(cid) {
     const i = await UI.menu([
       { label: '1 도시일람' }, { label: '2 무장일람' }, { label: '3 세력일람' },
-      { label: '4 개발상황' }, { label: '5 자기세력 무장' },
-    ], { title: '정보', x: 40, y: 60 });
+      { label: '4 개발상황' }, { label: '5 자기세력 무장' }, { label: '6 열전' },
+      { label: '7 연표' },
+    ], { title: '정보', x: 40, y: 60, width: 320 });
     if (i === null) return;
     if (i === 0) {
       const rows = CITIES.map(d => {
@@ -544,11 +615,20 @@ const Game = (() => {
       });
       await UI.table('도시 일람', [['도시', 'l'], ['군주', 'l'], ['인구'], ['금'], ['군량'], ['병사'], ['장수'], ['민충']], rows);
     } else if (i === 1) {
-      const rows = Object.values(st.gens).filter(g => g.clan >= 0).map(g => {
+      const list = Object.values(st.gens).filter(g => g.clan >= 0)
+        .sort((a, b) => (S(b.name)[0] + S(b.name)[4]) - (S(a.name)[0] + S(a.name)[4]));
+      const rows = list.map(g => {
+        const b = g.bonus || {};
+        const f = (v, k) => b[k] ? `${v + b[k]}${UI.og('*')}` : v;
         const s = S(g.name);
-        return [g.name, st.clans[g.clan].ruler, cname(g.city), s[0], s[1], s[2], s[3], s[4], s[5], g.loyal];
-      }).sort((a, b) => (b[3] + b[4]) - (a[3] + a[4]));
-      await UI.table('무장 일람', [['무장', 'l'], ['소속', 'l'], ['도시', 'l'], ['무력'], ['지력'], ['정치'], ['매력'], ['육지'], ['수지'], ['충성']], rows);
+        return [g.name, st.clans[g.clan].ruler, cname(g.city),
+          f(s[0], 'w'), f(s[1], 'i'), s[2], s[3], f(s[4], 'l'), f(s[5], 'n'), g.loyal];
+      });
+      while (true) {
+        const k = await UI.table('무장 일람', [['무장', 'l'], ['소속', 'l'], ['도시', 'l'], ['무력'], ['지력'], ['정치'], ['매력'], ['육지'], ['수지'], ['충성']], rows, { pick: true });
+        if (k === null || k === undefined || !list[k]) break;
+        await UI.bio(list[k].name, `${st.clans[list[k].clan].ruler} 군 · ${cname(list[k].city)} · 충성 ${list[k].loyal}`, { items: itemsOf(list[k].name) });
+      }
     } else if (i === 2) {
       const rows = st.clans.filter(c => c.alive).map(cl => {
         const cs = clanCities(cl.id);
@@ -566,12 +646,37 @@ const Game = (() => {
         return [cname(id), c.agri, c.comm, c.tech, c.flood, c.wall, c.train, c.bows, c.cbows, c.horses];
       });
       await UI.table('개발 상황', [['도시', 'l'], ['농업'], ['상업'], ['기술'], ['치수'], ['성벽'], ['훈련'], ['노궁'], ['강노'], ['군마']], rows);
-    } else {
-      const rows = clanGens(st.playerClan).map(g => {
+    } else if (i === 4) {
+      const list = clanGens(st.playerClan);
+      const rows = list.map(g => {
         const s = S(g.name);
         return [g.name, cname(g.city), s[0], s[1], s[2], s[3], s[4], s[5], g.loyal, g.acted ? '완료' : ''];
       });
-      await UI.table(`${player().ruler} 군 무장`, [['무장', 'l'], ['도시', 'l'], ['무력'], ['지력'], ['정치'], ['매력'], ['육지'], ['수지'], ['충성'], ['상태', 'l']], rows);
+      while (true) {
+        const k = await UI.table(`${player().ruler} 군 무장`, [['무장', 'l'], ['도시', 'l'], ['무력'], ['지력'], ['정치'], ['매력'], ['육지'], ['수지'], ['충성'], ['상태', 'l']], rows, { pick: true });
+        if (k === null || k === undefined || !list[k]) break;
+        await UI.bio(list[k].name, `${cname(list[k].city)} · 충성 ${list[k].loyal}`, { items: itemsOf(list[k].name) });
+      }
+    } else if (i === 6) {
+      const rows = (st.hist || []).slice().reverse()
+        .map(h => Array.isArray(h) ? [`${h[0]}년 ${h[1]}월`, h[2]] : ['', String(h)]);
+      if (!rows.length) { await UI.anyKey('아직 기록된 사건이 없습니다'); return; }
+      await UI.table('연표', [['연월', 'l'], ['사건', 'l']], rows, { w: 760, per: 14 });
+    } else {
+      /* 열전 — 이름으로 찾아보기 */
+      const all = Object.keys(GENERALS).filter(n => st.gens[n]).sort((a, b) => S(b)[0] - S(a)[0]);
+      const rows = all.map(n => {
+        const s = S(n), g = st.gens[n];
+        const owner = g.clan >= 0 ? st.clans[g.clan].ruler : (g.clan === -3 ? '포로' : '재야');
+        const b = (typeof BIOS !== 'undefined' && BIOS[n]) || ['—'];
+        return [n, b[0], owner, cname(g.city), s[0], s[1], s[2], s[3]];
+      });
+      while (true) {
+        const k = await UI.table('열전 — 무장을 고르시오', [['무장', 'l'], ['자', 'l'], ['소속', 'l'], ['소재', 'l'], ['무력'], ['지력'], ['정치'], ['매력']], rows, { pick: true });
+        if (k === null || k === undefined || !all[k]) break;
+        const g = st.gens[all[k]];
+        await UI.bio(all[k], g.clan >= 0 ? `${st.clans[g.clan].ruler} 군 · ${cname(g.city)}` : '재야', { items: itemsOf(all[k]) });
+      }
     }
   }
 
@@ -720,7 +825,7 @@ const Game = (() => {
       if (!tgt) return;
       if (!await UI.confirm(UI.rd('정말로 항복하겠습니까? 게임이 끝납니다'))) return;
       const cl = st.clans.find(c => c.ruler === tgt);
-      clanCities(st.playerClan).forEach(id => { st.cities[id].clan = cl.id; });
+      surrenderTo(st.playerClan, cl.id);
       st.gameOver = 'surrender';
       return 'endcity';
     }
@@ -849,7 +954,8 @@ const Game = (() => {
     if (!gens.length) return;
     const send = Math.floor(c.troops * 0.75);
     const per = Math.floor(send / gens.length);
-    const atkUnits = gens.map((nm, k) => ({ name: nm, troops: per, weapon: pickWeapon(c, k), train: c.train }));
+    const atkUnits = gens.map((nm, k) => ({
+      name: nm, troops: per, weapon: pickWeapon(c, k), train: c.train, bonus: st.gens[nm].bonus || null }));
     c.troops -= send;
 
     if (d.clan === st.playerClan) {
@@ -878,7 +984,8 @@ const Game = (() => {
           st.cities[to].gens.push(nm); assignOfficers(to);
         }
       });
-      st.hist.push(`${st.year}년 ${st.month}월 ${cl.ruler} 군이 ${cname(to)}를 점령`);
+      st.hist.push([st.year, st.month, `${cl.ruler} 군이 ${cname(to)}를 점령`]);
+      checkRulers();
       if (!wasPlayerNeighbor) { /* 조용히 진행 */ }
     } else {
       c.troops += Math.floor(send * (0.25 + Math.random() * 0.3));
@@ -924,7 +1031,8 @@ const Game = (() => {
         if (c.clan === st.playerClan) lines.push(`${UI.yl(cname(d.id))} 금 수입 ${UI.gr('+' + g)}`);
       }
       if (st.month === 4 || st.month === 9) {
-        const base = c.pop / 8 * (c.agri / 55) * (0.8 + c.flood / 400) * (0.5 + c.loyal / 200);
+        const boon = st.flags && st.flags.pungnyeon_year === st.year ? 1.3 : 1;
+        const base = c.pop / 8 * (c.agri / 55) * (0.8 + c.flood / 400) * (0.5 + c.loyal / 200) * boon;
         const r = Math.floor(st.month === 9 ? base : base * 0.4);
         c.rice += r;
         if (c.clan === st.playerClan)
@@ -959,8 +1067,8 @@ const Game = (() => {
       const c = st.cities[g.city];
       if (c.governor !== g.name || clanCities(g.clan).length < 2) {
         /* 단순 이탈 */
-        const arr = c.gens; arr.splice(arr.indexOf(g.name), 1);
-        g.clan = -1; g.loyal = 0; assignOfficers(c.id);
+        removeFromCity(g.name);
+        g.clan = -1; g.loyal = 0;
         lines.push(`${UI.gr(g.name)}가 ${UI.yl(cname(c.id))}를 떠났습니다`);
       } else {
         /* 태수 모반 → 독립 */
@@ -970,12 +1078,23 @@ const Game = (() => {
           isPlayer: false, alive: true, emperor: false, allies: {}, truce: {}, relation: {},
         });
         st.clans.forEach((x, i) => { if (i !== nid) { x.relation[nid] = rr(20, 40); st.clans[nid].relation[i] = rr(20, 40); } });
+        const oldClan = c.clan;
         c.clan = nid; g.clan = nid; g.loyal = 100;
         c.gens.filter(n => n !== g.name).forEach(n => {
-          if (Math.random() < 0.5) st.gens[n].clan = nid;
-          else { const arr = c.gens; arr.splice(arr.indexOf(n), 1); st.gens[n].clan = -1; st.gens[n].loyal = 0; }
+          const isRuler = st.clans[oldClan] && st.clans[oldClan].ruler === n;
+          const refuge = clanCities(oldClan).filter(x => x !== c.id);
+          if (!isRuler && Math.random() < 0.5) {
+            st.gens[n].clan = nid;                       // 반란에 가담
+            st.gens[n].loyal = rr(60, 85);
+          } else if (refuge.length) {
+            moveGen(n, refuge[0]);                       // 본국으로 달아난다
+          } else {
+            removeFromCity(n);
+            st.gens[n].clan = -1; st.gens[n].loyal = 0;
+          }
         });
         assignOfficers(c.id);
+        lines.push(...checkRulers());
         lines.push(`${UI.yl(cname(c.id))}의 ${UI.gr(g.name)}이 모반을 일으켰습니다`);
         lines.push(`${UI.gr(g.name)}은 독립해서 군주가 되었습니다`);
         checkClanDeath();
@@ -991,8 +1110,8 @@ const Game = (() => {
       if (c.clan === st.playerClan) lines.push(`${UI.yl(cname(d.id))}에서 백성이 봉기해 병사 ${UI.rd(lost)}명을 잃었습니다`);
     }
 
-    /* 재야 무장 등장 알림 · 조언 (플레이어 전용) */
-    if (Math.random() < 0.18 && clanCities(st.playerClan).length) {
+    /* 조언 말풍선 */
+    if (Math.random() < 0.14 && clanCities(st.playerClan).length) {
       const p = player();
       const cs = clanCities(st.playerClan);
       const cid = cs[rnd(cs.length)];
@@ -1000,8 +1119,18 @@ const Game = (() => {
       const line = ADVICE_LINES[rnd(ADVICE_LINES.length)]
         .replace('{L}', p.ruler).replace('{C}', CITIES[cid - 1].name)
         .replace('{E}', foes.length ? foes[rnd(foes.length)].ruler : '적');
-      const sage = ['사마휘', '좌자', '관로'].find(n => st.gens[n]) || '사마휘';
+      const sage = st.cities[cid].advisorName || (st.gens['사마휘'] ? '사마휘' : p.ruler);
       await UI.speech(sage, line, `${sage} 말하길`);
+    }
+
+    lines.push(...checkRulers());
+
+    /* 사서 이벤트 · 외교 · 수명 · 임의 사건 */
+    if (typeof Events !== 'undefined') {
+      Events.aiHistory(st, lines);
+      await Events.monthly(st, lines);
+      checkClanDeath();
+      lines.push(...checkRulers());
     }
 
     /* 결과 보고 */
@@ -1056,5 +1185,7 @@ const Game = (() => {
     newGame, loop, get, clanCities, clanGens, ADJ, isSea, S, cname,
     set: s => { st = s; }, refresh,
     aiPhase, endOfMonth, checkEnd,      // 검증용
+    assignOfficers, killGen, moveGen, captureCity, freeGensIn, player, checkRulers, removeFromCity, surrenderTo,
+    stat, grant, itemsOf,
   };
 })();

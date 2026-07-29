@@ -211,3 +211,28 @@ canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edge
 .hr { color: var(--red); }
 .hw { color: var(--white); }
 .hidden { display: none !important; }
+
+/* ── 이벤트 배너 · 열전 ──────────────────────────────────────────── */
+.evbanner {
+  left: 50%; top: 250px; transform: translateX(-50%);
+  padding: 22px 60px; text-align: center;
+  background: var(--navy-dk);
+}
+.evbanner .t {
+  font-size: 46px; line-height: 56px; color: var(--yellow); letter-spacing: 6px;
+  text-shadow: 4px 4px 0 #8c2000;
+}
+.biopane {
+  left: 60px; top: 90px; width: 980px; min-height: 300px;
+  display: flex; gap: 24px; padding: 16px 20px;
+}
+.biopane canvas { width: 190px; height: 220px; flex: none; }
+.biopane .bd { flex: 1; }
+.biopane .nm { font-size: 32px; line-height: 42px; }
+.biopane .st { font-size: 24px; line-height: 34px; color: var(--white); margin: 6px 0 4px; }
+.biopane .st b { color: var(--yellow); font-weight: normal; }
+.biopane .ex { font-size: 22px; line-height: 30px; margin-bottom: 6px; }
+.biopane .tx {
+  font-size: 25px; line-height: 38px; white-space: pre-line;
+  border-top: 2px solid var(--navy-lt); padding-top: 10px; color: #e8e8ff;
+}

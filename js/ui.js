@@ -278,34 +278,80 @@ const UI = (() => {
     el.className = 'panel';
     el.style.cssText = `left:${opt.x || 24}px;top:${opt.y || 56}px;width:${opt.w || 1000}px;max-height:600px;overflow:hidden`;
     center.appendChild(el);
-    let page = 0;
+    let page = 0, sel = 0;
     const per = opt.per || 15;
     const pages = Math.max(1, Math.ceil(rows.length / per));
     const render = () => {
       const view = rows.slice(page * per, page * per + per);
       el.innerHTML = `<div class="hd">${title} <span class="hi">(${page + 1}/${pages})</span></div>
         <table class="grid"><tr>${head.map(h => `<th class="${h[1] || ''}">${h[0]}</th>`).join('')}</tr>
-        ${view.map(r => `<tr>${r.map((c, i) => `<td class="${head[i][1] || ''}">${c}</td>`).join('')}</tr>`).join('')}</table>`;
-      msg(cy('←→ 페이지 넘김 / ESC 닫기'));
+        ${view.map((r, i) => `<tr class="${opt.pick && i === sel ? 'sel' : ''}" data-i="${page * per + i}">` +
+          r.map((c, j) => `<td class="${head[j][1] || ''}">${c}</td>`).join('') + '</tr>').join('')}</table>`;
+      msg(opt.pick ? cy('↑↓ 선택 / ←→ 페이지 / Enter 열전 / ESC 닫기') : cy('←→ 페이지 넘김 / ESC 닫기'));
     };
     render();
     try {
       while (true) {
         const ev = await nextInput();
-        if (ev.t === 'key') {
-          if (['ArrowRight', 'ArrowDown', ' ', 'Enter'].includes(ev.k)) { page = (page + 1) % pages; render(); }
-          else if (['ArrowLeft', 'ArrowUp'].includes(ev.k)) { page = (page + pages - 1) % pages; render(); }
-          else if (isCancel(ev)) return;
-        } else return;
+        if (ev.t === 'click') {
+          const tr = ev.target.closest && ev.target.closest('tr');
+          if (opt.pick && tr && el.contains(tr) && tr.dataset.i !== undefined) return +tr.dataset.i;
+          if (!el.contains(ev.target)) return null;
+          continue;
+        }
+        const k = ev.k, cnt = Math.min(per, rows.length - page * per);
+        if (opt.pick && ['ArrowDown', 'j'].includes(k)) { sel = (sel + 1) % cnt; render(); }
+        else if (opt.pick && ['ArrowUp', 'k'].includes(k)) { sel = (sel + cnt - 1) % cnt; render(); }
+        else if (['ArrowRight', 'l'].includes(k) || (!opt.pick && ['ArrowDown', ' '].includes(k))) {
+          page = (page + 1) % pages; sel = 0; render();
+        } else if (['ArrowLeft', 'h'].includes(k) || (!opt.pick && k === 'ArrowUp')) {
+          page = (page + pages - 1) % pages; sel = 0; render();
+        } else if (k === 'Enter') { if (opt.pick) return page * per + sel; page = (page + 1) % pages; render(); }
+        else if (isCancel(ev)) return null;
       }
     } finally { el.remove(); }
+  }
+
+  /* ── 이벤트 제목 배너 ───────────────────────────────────────────── */
+  async function banner(title) {
+    const el = document.createElement('div');
+    el.className = 'panel evbanner';
+    el.innerHTML = `<div class="t">${title}</div>`;
+    center.appendChild(el);
+    msg(cy('아무 키나 눌러 주세요'));
+    await nextInput();
+    el.remove();
+  }
+
+  /* ── 열전 ───────────────────────────────────────────────────────── */
+  async function bio(name, extra, opts) {
+    const s = GENERALS[name] || [0, 0, 0, 0, 0, 0, 0, 0];
+    const b = (typeof BIOS !== 'undefined' && BIOS[name]) || ['—', '전하는 기록이 없다.'];
+    const el = document.createElement('div');
+    el.className = 'panel biopane';
+    el.innerHTML = `
+      <canvas width="95" height="110"></canvas>
+      <div class="bd">
+        <div class="nm"><span class="hy">${name}</span> <span class="hi">자(字) ${b[0]}</span></div>
+        <div class="st">무력 <b>${s[0]}</b>　지력 <b>${s[1]}</b>　정치 <b>${s[2]}</b>　매력 <b>${s[3]}</b>
+          　육지 <b>${s[4]}</b>　수지 <b>${s[5]}</b>　의리 <b>${s[6]}</b></div>
+        ${extra ? `<div class="ex hi">${extra}</div>` : ''}
+        ${(opts && opts.items && opts.items.length)
+          ? `<div class="ex ho">소지 : ${opts.items.map(n => `${n}${TREASURES[n] ? `(${TREASURES[n].kind})` : ''}`).join('　')}</div>` : ''}
+        <div class="tx">${b[1]}</div>
+      </div>`;
+    center.appendChild(el);
+    Portrait.draw(el.querySelector('canvas'), name, {});
+    msg(cy('아무 키나 눌러 주세요'));
+    await nextInput();
+    el.remove();
   }
 
   /* ── 말풍선 이벤트 (원작의 초상화 + 말풍선) ─────────────────────── */
   async function speech(name, text, title) {
     const el = document.createElement('div');
     el.className = 'panel';
-    el.style.cssText = 'left:190px;top:230px;width:900px;height:230px;';
+    el.style.cssText = 'left:170px;top:230px;width:872px;min-height:230px;';
     el.innerHTML = `
       <canvas width="95" height="110" style="width:190px;height:220px;position:absolute;left:8px;top:2px"></canvas>
       <div style="position:absolute;left:230px;top:14px" class="hw">${title || name + ' 말하길'}</div>
@@ -329,6 +375,7 @@ const UI = (() => {
   return {
     fit, cmdbar, msg, anyKey, market, date, face, cityPane, menu, topCommand, pickNum,
     pickCity, pickGeneral, table, speech, confirm, report, nextInput, isCancel, isOk,
+    banner, bio,
     cy, yl, gr, mg, og, rd, $,
   };
 })();
