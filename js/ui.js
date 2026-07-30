@@ -514,9 +514,12 @@ const UI = (() => {
     el.remove();
   }
 
-  async function confirm(prompt) {
+  /* danger 를 주면 커서가 '아니오' 에 놓인다.
+     메시지를 넘기려 키를 연타하다 판이 끝나 버리는 일을 막는다. */
+  async function confirm(prompt, danger) {
     msg(prompt, true);
-    const i = await menu([{ label: '예' }, { label: '아니오' }], { x: 900, y: 560, width: 180 });
+    const i = await menu([{ label: '예' }, { label: '아니오' }],
+      { x: 900, y: 560, width: 180, sel: danger ? 1 : 0 });
     return i === 0;
   }
 

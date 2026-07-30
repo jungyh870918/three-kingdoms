@@ -401,14 +401,70 @@ const Game = (() => {
   }
 
   /* 군주가 죽거나 사로잡히면 후계자를 세운다 */
+  /* 무장이 다 죽어 대가 끊길 판일 때, 그 세력의 고을에서 사람을 찾아 세운다.
+     땅을 가진 세력이 사람 하나 없다고 하룻밤에 흩어지는 것은 사서에도 없는 일이고,
+     플레이어가 스무 성을 가진 채 타이틀로 쫓겨나는 원인이었다.
+     ① 자기 고을에 숨어 사는 재야  ② 자기 고을에 갇힌 포로  순으로 찾는다. */
+  function raiseSuccessor(clanIdx) {
+    const cs = clanCities(clanIdx);
+    if (!cs.length) return null;
+    const score = n => S(n)[2] + S(n)[3] + S(n)[1] / 2;
+    /* 재야 */
+    const free = Object.values(st.gens)
+      .filter(g => g.clan === -1 && cs.includes(g.city))
+      .sort((a, b) => score(b.name) - score(a.name))[0];
+    if (free) {
+      free.clan = clanIdx; free.loyal = 100; free.found = false; free.acted = true;
+      if (!st.cities[free.city].gens.includes(free.name)) st.cities[free.city].gens.push(free.name);
+      return { name: free.name, how: '재야' };
+    }
+    /* 포로 */
+    for (const cid of cs) {
+      const arr = st.cities[cid].prisoners;
+      if (!arr.length) continue;
+      const nm = arr.slice().sort((a, b) => score(b) - score(a))[0];
+      arr.splice(arr.indexOf(nm), 1);
+      const g = st.gens[nm];
+      if (!g) continue;
+      g.clan = clanIdx; g.city = cid; g.loyal = 70; g.acted = true;
+      if (!st.cities[cid].gens.includes(nm)) st.cities[cid].gens.push(nm);
+      return { name: nm, how: '포로' };
+    }
+    /* 천하의 재야 — 후기 시나리오는 살아 있는 인물이 적어 내 고을에 아무도 없을 수 있다.
+       땅을 가진 세력이 사람 하나 없어 하룻밤에 사라지는 것보다는 멀리서 불러오는 편이 낫다. */
+    const far = Object.values(st.gens)
+      .filter(g => g.clan === -1)
+      .sort((a, b) => score(b.name) - score(a.name))[0];
+    if (far) {
+      const seat = cs[0];
+      removeFromCity(far.name);
+      far.clan = clanIdx; far.city = seat; far.loyal = 100; far.found = false; far.acted = true;
+      st.cities[seat].gens.push(far.name);
+      return { name: far.name, how: '먼 고을' };
+    }
+    return null;
+  }
+
   function checkRulers() {
     const lines = [];
     st.clans.forEach((cl, i) => {
       if (!cl.alive) return;
       const r = st.gens[cl.ruler];
       if (r && r.clan === i) return;
-      const pool = clanGens(i);
-      if (!pool.length) {                       // 대를 이을 사람이 없으면 세력이 흩어진다
+      let pool = clanGens(i);
+      if (!pool.length) {
+        /* 땅이 남아 있다면 그 땅의 사람을 세운다 */
+        const up = raiseSuccessor(i);
+        if (up) {
+          lines.push(up.how === '포로'
+            ? `${UI.rd(cl.ruler)}를 잃은 군은 옥에 있던 ${UI.yl(up.name)}을 풀어 세웠습니다`
+            : up.how === '먼 고을'
+              ? `${UI.rd(cl.ruler)}를 잃은 군은 멀리서 ${UI.yl(up.name)}을 불러 세웠습니다`
+              : `${UI.rd(cl.ruler)}를 잃은 군은 ${UI.yl(up.name)}을 맞아들여 대를 이었습니다`);
+          pool = clanGens(i);
+        }
+      }
+      if (!pool.length) {                       // 땅도 사람도 없으면 그때는 흩어진다
         cl.alive = false;
         clanCities(i).forEach(cid => { st.cities[cid].clan = -1; st.cities[cid].governor = null; });
         lines.push(`${UI.rd(cl.ruler + ' 군')}은 뒤를 이을 사람이 없어 흩어졌습니다`);
@@ -829,7 +885,8 @@ const Game = (() => {
       const foes = st.clans.filter(c => c.alive && c.id !== st.playerClan);
       const tgt = await UI.pickGeneral(st, '누구에게 항복합니까?', foes.map(f => ({ name: f.ruler, tag: `${clanCities(f.id).length}성` })));
       if (!tgt) return;
-      if (!await UI.confirm(UI.rd('정말로 항복하겠습니까? 게임이 끝납니다'))) return;
+      if (!await UI.confirm(UI.rd('정말로 항복하겠습니까? 게임이 끝납니다'), true)) return;
+      if (!await UI.confirm(UI.rd('되돌릴 수 없습니다. 항복합니까?'), true)) return;
       const cl = st.clans.find(c => c.ruler === tgt);
       surrenderTo(st.playerClan, cl.id);
       st.gameOver = 'surrender';
@@ -866,7 +923,7 @@ const Game = (() => {
     } else if (i === 2) {
       return 'endcity';
     } else {
-      if (await UI.confirm('타이틀 화면으로 돌아갑니까?')) return 'quit';
+      if (await UI.confirm('타이틀 화면으로 돌아갑니까? (저장하지 않은 것은 사라집니다)', true)) return 'quit';
     }
   }
 
@@ -1172,6 +1229,15 @@ const Game = (() => {
       lines.push(...checkRulers());
     }
 
+    /* 대가 끊길 위험을 미리 알린다 — 군주 하나만 남으면 그가 죽는 날 낯선 사람이 뒤를 잇는다 */
+    const myGens = clanGens(st.playerClan);
+    if (myGens.length <= 1 && clanCities(st.playerClan).length) {
+      const heir = HEIRS[player().ruler];
+      if (!heir || !st.gens[heir] || st.gens[heir].clan !== st.playerClan) {
+        lines.push(UI.rd('군주 외에 무장이 없습니다') + ' — 뒤를 이을 사람을 서둘러 등용하십시오');
+      }
+    }
+
     /* 결과 보고 */
     if (lines.length) { UI.cityPane(st, null); await UI.report(lines.slice(0, 14)); }
 
@@ -1225,6 +1291,7 @@ const Game = (() => {
     set: s => { st = s; }, refresh, diff, monthsIn,
     aiPhase, endOfMonth, checkEnd,      // 검증용
     assignOfficers, killGen, moveGen, captureCity, freeGensIn, player, checkRulers, removeFromCity, surrenderTo,
+    raiseSuccessor,
     stat, grant, itemsOf,
   };
 })();

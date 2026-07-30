@@ -811,7 +811,8 @@ const ANNALS_EVENTS = (() => {
         allUp(st, ch.id, 'loyal', -rr(5, 12));
         setFlag(st, 'an_chojoo');
         if (mine(st, ch.id)) {
-          if (await UI.confirm(UI.rd('초주의 말을 따라 항복하겠습니까? (게임이 끝납니다)'))) {
+          if (await UI.confirm(UI.rd('초주의 말을 따라 항복하겠습니까? (게임이 끝납니다)'), true) &&
+              await UI.confirm(UI.rd('정말로 항복합니까? 되돌릴 수 없습니다'), true)) {
             const foe = st.clans.find(c => c.alive && c.id !== ch.id && adjacentTo(st, c.id, ch.id));
             if (foe) { Game.surrenderTo(ch.id, foe.id); st.gameOver = 'surrender'; }
           } else {

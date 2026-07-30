@@ -234,7 +234,15 @@ const Events = (() => {
   async function succeed(st, clanIdx, deadRuler, lines) {
     const cl = st.clans[clanIdx];
     if (!cl || !cl.alive) return;
-    const pool = clanGens(st, clanIdx);
+    let pool = clanGens(st, clanIdx);
+    if (!pool.length) {
+      /* 땅이 남아 있으면 그 고을의 사람을 세운다 (game.js 와 같은 규칙) */
+      const up = Game.raiseSuccessor ? Game.raiseSuccessor(clanIdx) : null;
+      if (up) {
+        lines.push(`${UI.rd(deadRuler)}를 잃은 군은 ${UI.yl(up.name)}을 맞아들여 대를 이었습니다`);
+        pool = clanGens(st, clanIdx);
+      }
+    }
     if (!pool.length) {
       cl.alive = false;
       lines.push(`${UI.rd(deadRuler + ' 군')}은 뒤를 이을 사람이 없어 흩어졌습니다`);
@@ -825,7 +833,8 @@ const Events = (() => {
         await UI.banner(`${cl.ruler}의 권고`);
         await UI.speech(cl.ruler,
           `외로운 성 하나로 무엇을 하겠소.\n항복한다면 예로써 대접하고 벼슬도 주겠소.`, `${cl.ruler}의 사자`);
-        if (await UI.confirm(UI.rd('항복하겠습니까? (게임이 끝납니다)'))) {
+        if (await UI.confirm(UI.rd('항복하겠습니까? (게임이 끝납니다)'), true) &&
+            await UI.confirm(UI.rd('정말로 항복합니까? 되돌릴 수 없습니다'), true)) {
           Game.surrenderTo(pc(st), cl.id);
           st.gameOver = 'surrender';
         } else {
