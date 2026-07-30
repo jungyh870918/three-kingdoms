@@ -177,6 +177,9 @@ const UI = (() => {
           `<div class="it ${i === sel ? 'sel' : ''} ${it.dis ? 'dis' : ''}" data-i="${i}">${it.label}</div>`).join('');
     };
     render();
+    /* 커서가 움직일 때마다 부르는 훅 — 항목 설명을 메시지창에 띄우는 데 쓴다 */
+    const moved = () => { render(); if (opt.onMove) opt.onMove(sel); };
+    if (opt.onMove) opt.onMove(sel);
     try {
       while (true) {
         const ev = await nextInput();
@@ -184,13 +187,14 @@ const UI = (() => {
           const t = ev.target.closest && ev.target.closest('.it');
           if (t && el.contains(t)) {
             const i = +t.dataset.i;
+            if (i !== sel) { sel = i; moved(); continue; }
             if (!items[i].dis) return i;
           } else if (!opt.noCancel && !el.contains(ev.target)) return null;
           continue;
         }
         const k = ev.k;
-        if (k === 'ArrowDown' || k === 'j') { sel = (sel + 1) % items.length; render(); }
-        else if (k === 'ArrowUp' || k === 'k') { sel = (sel + items.length - 1) % items.length; render(); }
+        if (k === 'ArrowDown' || k === 'j') { sel = (sel + 1) % items.length; moved(); }
+        else if (k === 'ArrowUp' || k === 'k') { sel = (sel + items.length - 1) % items.length; moved(); }
         else if (isOk(ev)) { if (!items[sel].dis) return sel; }
         else if (isCancel(ev)) { if (!opt.noCancel) return null; }
         else if (/^[0-9]$/.test(k)) {

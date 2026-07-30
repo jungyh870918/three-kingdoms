@@ -187,8 +187,26 @@
     const ok = await UI.confirm(`${UI.yl(cl.ruler)}로 천하를 도모하겠습니까?`);
     if (!ok) { pane.classList.add('hidden'); return false; }
 
+    /* 난이도 — 타 세력이 얼마나 사납게 나오는가 */
+    pane.classList.add('hidden');
+    const dq = q.get('diff');
+    let di = dq !== null ? Math.max(0, Math.min(DIFFICULTY.length - 1, +dq || 0)) : null;
+    if (di === null) {
+      UI.msg(UI.cy('난이도를 고르십시오  (↑↓ 선택 / Enter 결정)'));
+      const items = DIFFICULTY.map((d, i) => ({ label: `${i + 1} ${d.key}` }));
+      let pick = DIFF_DEFAULT;
+      /* 고르는 동안 설명을 보여 준다 */
+      const show = i => UI.msg(`${UI.yl(DIFFICULTY[i].key)}\n${UI.cy(DIFFICULTY[i].desc)}`);
+      show(pick);
+      pick = await UI.menu(items, {
+        title: '난이도', x: 470, y: 250, width: 340, noCancel: true, sel: DIFF_DEFAULT,
+        onMove: show,
+      });
+      di = pick === null ? DIFF_DEFAULT : pick;
+    }
+
     /* 플레이어 지정 */
-    Game.newGame(si, chosen);
+    Game.newGame(si, chosen, di);
     const nst = Game.get();
     Render.bind(nst);
     pane.classList.add('hidden');
@@ -206,7 +224,8 @@
       if (!raw) return { label: `${i + 1} (비어 있음)`, dis: true };
       try {
         const s = JSON.parse(raw);
-        return { label: `${i + 1} ${s.year}년 ${s.month}월  ${s.clans[s.playerClan].ruler}` };
+        const dk = (DIFFICULTY[s.diff === undefined ? DIFF_DEFAULT : s.diff] || {}).key || '';
+        return { label: `${i + 1} ${s.year}년 ${s.month}월  ${s.clans[s.playerClan].ruler}  ${dk}` };
       } catch (e) { return { label: `${i + 1} (손상)`, dis: true }; }
     });
     const i = await UI.menu(slots, { title: '기록 불러오기', x: 440, y: 260, width: 420 });

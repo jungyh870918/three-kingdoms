@@ -38,10 +38,12 @@ const Game = (() => {
   const get = () => st;
 
   /* ── 초기화 ─────────────────────────────────────────────────────── */
-  function newGame(scenIdx, playerClanIdx) {
+  function newGame(scenIdx, playerClanIdx, diffIdx) {
     const sc = SCENARIOS[scenIdx];
     st = {
       scen: scenIdx, year: sc.year, month: sc.month, seasonIdx: ((sc.month - 1) / 3) | 0,
+      diff: diffIdx === undefined ? DIFF_DEFAULT : clamp(diffIdx, 0, DIFFICULTY.length - 1),
+      startMonth: sc.year * 12 + sc.month,
       playerClan: playerClanIdx, clans: [], cities: {}, gens: {},
       market: { riceBuy: 100, riceSell: 70, bow: 60, cbow: 90, horse: 50 },
       cursorCity: null, blink: true, marchArrow: null, hist: [], flags: {},
@@ -341,11 +343,14 @@ const Game = (() => {
       // 공격 실패 → 생존군 귀환
       const f = st.cities[fromCity];
       if (f.clan === atkClan) f.troops += backTroops;
+      const sparedA = spare(res.dead.A, atkClan), sparedD = spare(res.dead.D, d.clan);
       res.dead.A.forEach(nm => killGen(nm));
       res.dead.D.forEach(nm => killGen(nm));
       res.captured.forEach(nm => { if (st.gens[nm]) { st.gens[nm].clan = -3; st.gens[nm].city = toCity; d.prisoners.push(nm); } });
       const lines = [`${UI.rd(cname(toCity) + ' 공략 실패')}. 군은 물러났습니다`];
       if (res.dead.A.length) lines.push(`${UI.rd(res.dead.A.join('  '))} 가 전사했습니다`);
+      const back = sparedA.concat(sparedD);
+      if (back.length) lines.push(`${UI.gr(back.join('  '))} 는 죽은 줄 알았으나 살아 돌아왔습니다`);
       await UI.report(lines);
     }
     st.cities[fromCity] && assignOfficers(fromCity);
@@ -639,7 +644,8 @@ const Game = (() => {
           cs.reduce((s, x) => s + st.cities[x].rice, 0),
           cl.id === st.playerClan ? '자기' : (player().allies[cl.id] ? '동맹' : (player().truce[cl.id] ? '정전' : ''))];
       }).sort((a, b) => b[1] - a[1]);
-      await UI.table('세력 일람', [['군주', 'l'], ['도시'], ['장수'], ['병사'], ['금'], ['군량'], ['관계', 'l']], rows);
+      await UI.table(`세력 일람   난이도 ${diff().key}`,
+        [['군주', 'l'], ['도시'], ['장수'], ['병사'], ['금'], ['군량'], ['관계', 'l']], rows);
     } else if (i === 3) {
       const rows = clanCities(st.playerClan).map(id => {
         const c = st.cities[id];
@@ -867,14 +873,26 @@ const Game = (() => {
   /* ═════════════════════════════════════════════════════════════════
    *  AI
    * ════════════════════════════════════════════════════════════════ */
+  /* 현재 난이도 표 — 옛 저장 파일에는 st.diff 가 없으므로 기본값으로 받는다 */
+  function diff() {
+    return DIFFICULTY[(st && st.diff !== undefined) ? st.diff : DIFF_DEFAULT] || DIFFICULTY[DIFF_DEFAULT];
+  }
+  /* 시나리오 시작 후 지난 달 수 */
+  function monthsIn() {
+    const start = st.startMonth || (SCENARIOS[st.scen] ? SCENARIOS[st.scen].year * 12 + SCENARIOS[st.scen].month : 0);
+    return st.year * 12 + st.month - start;
+  }
+
   async function aiPhase() {
+    const D = diff();
+    let onPlayer = 0;                      /* 이번 달에 플레이어를 향해 나온 군의 수 */
     for (const cl of st.clans) {
       if (!cl.alive || cl.isPlayer) continue;
       const cities = clanCities(cl.id);
       /* 내정 */
       cities.forEach(cid => {
         const c = st.cities[cid];
-        const acts = Math.max(1, Math.min(3, c.gens.length));
+        const acts = Math.max(1, Math.round(Math.max(1, Math.min(3, c.gens.length)) * D.grow));
         const wantTroops = Math.min(Math.floor(c.pop * 0.14), 70000);
         for (let k = 0; k < acts; k++) {
           const r = Math.random();
@@ -919,7 +937,7 @@ const Game = (() => {
           }
         }
       }
-      /* 출병 */
+      /* 출병 — 난이도가 문턱을 정한다 */
       const attacks = [];
       cities.forEach(cid => {
         const c = st.cities[cid];
@@ -928,16 +946,24 @@ const Game = (() => {
           const d = st.cities[t];
           if (d.clan === cl.id) return;
           if (d.clan >= 0 && (cl.allies[d.clan] || cl.truce[d.clan])) return;
+          const atPlayer = d.clan === st.playerClan;
+          /* 시작 직후에는 플레이어를 건드리지 않는다 */
+          if (atPlayer && monthsIn() < D.grace) return;
+          /* 이번 달에 플레이어를 향한 군이 이미 찼다 */
+          if (atPlayer && onPlayer >= D.onPlayer) return;
           const mine = c.troops * (1 + c.train / 150) * (1 + bestLead(c) / 200);
           const theirs = d.troops * (1 + d.train / 150) * (1 + bestLead(d) / 200) * (1 + d.wall / 250) + 3000;
-          if (mine > theirs * 1.35) attacks.push({ from: cid, to: t, ratio: mine / theirs });
+          const need = D.edge * (atPlayer ? D.edgePlayer : 1);
+          if (mine > theirs * need) attacks.push({ from: cid, to: t, ratio: mine / theirs, atPlayer });
         });
       });
       attacks.sort((a, b) => b.ratio - a.ratio);
       const done = new Set();
-      for (const a of attacks.slice(0, 2)) {
+      for (const a of attacks.slice(0, D.raids)) {
         if (done.has(a.from)) continue;
+        if (a.atPlayer && onPlayer >= D.onPlayer) continue;
         done.add(a.from);
+        if (a.atPlayer) onPlayer++;
         await aiAttack(cl, a.from, a.to);
         if (st.gameOver) return;
       }
@@ -947,6 +973,18 @@ const Game = (() => {
   }
 
   function bestLead(c) { return c.gens.length ? Math.max(...c.gens.map(n => S(n)[4])) : 30; }
+
+  /* 난이도의 mercy — 물러난 싸움에서 플레이어 무장이 죽는 대신 살아 돌아온다.
+     죽은 이 목록에서 빼내고, 빼낸 이름을 돌려준다 (배열을 그 자리에서 고친다) */
+  function spare(dead, clanIdx) {
+    const m = diff().mercy;
+    if (!m || clanIdx !== st.playerClan || !dead || !dead.length) return [];
+    const out = [];
+    for (let i = dead.length - 1; i >= 0; i--) {
+      if (Math.random() < m) out.unshift(dead.splice(i, 1)[0]);
+    }
+    return out;
+  }
 
   async function aiAttack(cl, from, to) {
     const c = st.cities[from], d = st.cities[to];
@@ -1025,14 +1063,15 @@ const Game = (() => {
       /* 민충 자연 회복/하락 */
       c.loyal = clamp(c.loyal + (c.loyal < 50 ? -1 : 0) + (Math.random() < 0.4 ? 1 : 0), 0, 100);
       /* 수입 — 금은 3·9월, 쌀은 4월(보리) · 9월(추수) */
+      const yd = c.clan === st.playerClan ? diff().yield : 1;   /* 난이도에 따른 살림 보정 */
       if (st.month === 3 || st.month === 9) {
-        const g = Math.floor(c.pop / 120 * (c.comm / 50) * (0.6 + c.loyal / 200) * (1 + c.tech / 400));
+        const g = Math.floor(c.pop / 120 * (c.comm / 50) * (0.6 + c.loyal / 200) * (1 + c.tech / 400) * yd);
         c.gold += g;
         if (c.clan === st.playerClan) lines.push(`${UI.yl(cname(d.id))} 금 수입 ${UI.gr('+' + g)}`);
       }
       if (st.month === 4 || st.month === 9) {
         const boon = st.flags && st.flags.pungnyeon_year === st.year ? 1.3 : 1;
-        const base = c.pop / 8 * (c.agri / 55) * (0.8 + c.flood / 400) * (0.5 + c.loyal / 200) * boon;
+        const base = c.pop / 8 * (c.agri / 55) * (0.8 + c.flood / 400) * (0.5 + c.loyal / 200) * boon * yd;
         const r = Math.floor(st.month === 9 ? base : base * 0.4);
         c.rice += r;
         if (c.clan === st.playerClan)
@@ -1183,7 +1222,7 @@ const Game = (() => {
 
   return {
     newGame, loop, get, clanCities, clanGens, ADJ, isSea, S, cname,
-    set: s => { st = s; }, refresh,
+    set: s => { st = s; }, refresh, diff, monthsIn,
     aiPhase, endOfMonth, checkEnd,      // 검증용
     assignOfficers, killGen, moveGen, captureCity, freeGensIn, player, checkRulers, removeFromCity, surrenderTo,
     stat, grant, itemsOf,

@@ -98,6 +98,7 @@ sb.Game = {
 load('events.js');
 load('story.js');
 load('annals.js');
+load('renown.js');
 load('human.js');
 const { Events, HUMAN_EVENTS } = grab('({ Events, HUMAN_EVENTS })');
 /* 연의 계열과 정사 계열을 합쳐 하나로 검사한다 */
