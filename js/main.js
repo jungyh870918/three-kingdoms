@@ -43,6 +43,21 @@
       const ev = Events.STORY.find(e => e.id === q.get('event'));
       if (ev) await ev.run(st);
     }
+    /* 사람 사이의 일 미리보기 :  &human=sworn  (all 이면 조건이 맞는 것을 모두) */
+    if (q.get('human')) {
+      Render.bind(st); UI.date(st); UI.market(st.market); UI.cmdbar(-1);
+      Events.bookkeep(st);
+      const want = q.get('human');
+      const list = HUMAN_EVENTS.filter(e => want === 'all' || e.id === want);
+      const lines = [];
+      for (const e of list) {
+        let ok = true;
+        try { ok = e.cond ? e.cond(st) : true; } catch (x) { ok = false; }
+        if (!ok) { lines.push(`${e.id} — 조건 불충족`); continue; }
+        try { await e.run(st, lines); } catch (x) { lines.push(`${e.id} — 오류 ${x.message}`); }
+      }
+      if (lines.length) UI.msg(lines.join(' · '));
+    }
     if (q.get('diplo')) {
       Render.bind(st); UI.date(st); UI.market(st.market); UI.cmdbar(-1);
       const d = Events.DIPLO.find(e => e.id === q.get('diplo'));

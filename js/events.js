@@ -52,6 +52,8 @@ const Events = (() => {
     return true;
   }
   const storyList = () => (typeof STORY_EVENTS !== 'undefined' ? STORY_EVENTS : []);
+  /* 사람 사이의 일 — human.js. 읽는 순서에 매이지 않도록 그때그때 찾는다 */
+  const randomList = () => RANDOM.concat(typeof HUMAN_EVENTS !== 'undefined' ? HUMAN_EVENTS : []);
 
   /* 무장을 세력에 합류시킨다 */
   function join(st, name, clanIdx, cityId, loyal) {
@@ -77,6 +79,92 @@ const Events = (() => {
     Game.removeFromCity(name);
     g.clan = -1; g.loyal = 0; g.found = false;
   }
+
+  /* ─────────────────────────────────────────────────────────────────
+   *  기록 — 조건문이 '지금'뿐 아니라 '여태까지'를 물을 수 있게 한다.
+   *  매월 monthly() 첫머리에서 갱신한다.
+   * ──────────────────────────────────────────────────────────────── */
+  function mem(st) {
+    return st.mem || (st.mem = {
+      held: {},        // 세력별 : 한 번이라도 가졌던 도시
+      peak: {},        // 세력별 : 최대 도시 수
+      own: {},         // 도시별 : { now, prev, since } 주인이 바뀐 이력
+      bond: {},        // 'A|B' : 의형제·친분의 깊이
+      tier: {},        // 등급별 : 마지막으로 그 등급 이벤트가 터진 달
+      start: null,     // 시나리오가 시작한 달
+    });
+  }
+  function bookkeep(st) {
+    const m = mem(st);
+    if (m.start === null) m.start = now(st);
+    st.clans.forEach(c => {
+      if (!c.alive) return;
+      const h = m.held[c.id] || (m.held[c.id] = {});
+      const cs = cities(st, c.id);
+      cs.forEach(id => { h[id] = true; });
+      if (cs.length > (m.peak[c.id] || 0)) m.peak[c.id] = cs.length;
+    });
+    CITIES.forEach(c => {
+      const o = st.cities[c.id].clan;
+      const r = m.own[c.id] || (m.own[c.id] = { now: o, prev: -9, since: now(st) });
+      if (r.now !== o) { r.prev = r.now; r.now = o; r.since = now(st); }
+    });
+  }
+
+  /* ── 시간 ──────────────────────────────────────────────────────── */
+  /* 시나리오가 시작한 뒤 몇 달이 지났는가 — '시작 직후 대사건' 을 막는 자물쇠 */
+  const elapsed = st => { const m = mem(st); return m.start === null ? 0 : now(st) - m.start; };
+  const startYear = st => (SCENARIOS[st.scen] || { year: st.year }).year;
+
+  /* ── 땅 ────────────────────────────────────────────────────────── */
+  const clanAny = (st, ruler) => st.clans.find(c => c.ruler === ruler);   // 망한 세력도 찾는다
+  const ownerOf = (st, cityId) => st.cities[cityId].clan;
+  const everHeld = (st, ci, cityId) => !!(mem(st).held[ci] && mem(st).held[ci][cityId]);
+  const peakOf = (st, ci) => mem(st).peak[ci] || 0;
+  /* taker 가 loser 에게서 이 성을 빼앗았는가 — 직전 주인이거나, loser 가 한때 가졌던 땅 */
+  const tookFrom = (st, cityId, taker, loser) => {
+    if (ownerOf(st, cityId) !== taker) return false;
+    const r = mem(st).own[cityId];
+    return (r && r.prev === loser) || everHeld(st, loser, cityId);
+  };
+  const sinceFell = (st, cityId) => { const r = mem(st).own[cityId]; return r ? now(st) - r.since : 999; };
+
+  /* ── 세력의 힘 ─────────────────────────────────────────────────── */
+  const troopsOf = (st, ci) => cities(st, ci).reduce((s, id) => s + st.cities[id].troops, 0);
+  /* 세력이 무너진 상태인가 — 땅도 병사도 사람도 없다 */
+  const broken = (st, ci) => {
+    const cs = cities(st, ci);
+    if (!cs.length) return true;
+    return cs.length <= 1 && troopsOf(st, ci) < 9000 && clanGens(st, ci).length <= 4 &&
+      cs.length < peakOf(st, ci);
+  };
+  /* 한때 컸다가 쪼그라들었는가 */
+  const declined = (st, ci, ratio) => {
+    const p = peakOf(st, ci); if (p < 2) return false;
+    return cities(st, ci).length <= Math.max(1, Math.floor(p * (ratio === undefined ? 0.5 : ratio)));
+  };
+
+  /* ── 사람 ──────────────────────────────────────────────────────── */
+  const serves = (st, name, ci) => alive(st, name) && st.gens[name].clan === ci && ci >= 0;
+  const cityOf = (st, name) => (st.gens[name] ? st.gens[name].city : -1);
+  const together = (st, a, b) => alive(st, a) && alive(st, b) &&
+    st.gens[a].clan === st.gens[b].clan && st.gens[a].city === st.gens[b].city;
+  /* 등장했다가 죽어 없어졌는가 (아직 등장 전인 인물과 구별한다) */
+  const gone = (st, name) => !st.gens[name] && !!(LIFE[name] && LIFE[name][0] && LIFE[name][0] <= st.year);
+  /* 포로인가 */
+  const captive = (st, name) => CITIES.some(c => st.cities[c.id].prisoners.includes(name));
+
+  /* ── 의형제 · 친분 ─────────────────────────────────────────────── */
+  const bkey = (a, b) => [a, b].sort().join('|');
+  const bondOf = (st, a, b) => mem(st).bond[bkey(a, b)] || 0;
+  const addBond = (st, a, b, n) => {
+    const m = mem(st), k = bkey(a, b);
+    m.bond[k] = clamp((m.bond[k] || 0) + n, 0, 100);
+    return m.bond[k];
+  };
+  const bondsOf = (st, name) => Object.keys(mem(st).bond)
+    .filter(k => k.split('|').includes(name) && mem(st).bond[k] > 0)
+    .map(k => ({ other: k.split('|').find(x => x !== name), lv: mem(st).bond[k] }));
 
   /* ─────────────────────────────────────────────────────────────────
    *  수명 — 등장 · 사망 · 군주 승계
@@ -117,7 +205,25 @@ const Events = (() => {
         lines.push(`${UI.gr(nm)}(이)가 세상을 떠났습니다`);
       }
       Game.killGen(nm);
+      await mourn(st, nm, lines);
       if (rulerOf) await succeed(st, rulerOf.id, nm, lines);
+    }
+  }
+
+  /* 정을 나눈 이가 죽으면 남은 쪽이 흔들린다 */
+  async function mourn(st, dead, lines) {
+    const ties = bondsOf(st, dead).filter(t => alive(st, t.other) && st.gens[t.other].clan >= 0);
+    for (const t of ties) {
+      const g = st.gens[t.other];
+      const deep = t.lv >= 60;
+      g.loyal = clamp(g.loyal - (deep ? 12 : 5), 0, 100);
+      if (deep && g.clan === pc(st)) {
+        await UI.speech(t.other,
+          `${UI.yl(dead)}…\n그 사람과 술잔을 나눈 것이 어제 같은데.\n이제 누구와 더불어 창을 들겠습니까.`, `${t.other}의 슬픔`);
+      } else if (deep) {
+        lines.push(`${UI.gr(t.other)}(이)가 ${UI.gr(dead)}의 죽음을 듣고 곡했습니다`);
+      }
+      delete mem(st).bond[bkey(dead, t.other)];
     }
   }
 
@@ -944,26 +1050,65 @@ const Events = (() => {
   /* ─────────────────────────────────────────────────────────────────
    *  월별 처리
    * ──────────────────────────────────────────────────────────────── */
+  /* ─────────────────────────────────────────────────────────────────
+   *  이벤트 등급 — 판을 얼마나 흔드는가
+   *    0 무해   대화 · 칭송 · 풍경.               조건이 느슨해도 좋다
+   *    1 간접   충성 · 훈련 · 민심만 움직인다.     느슨해도 좋다
+   *    2 재물   금 · 군량 · 병사 · 보물 · 땅의 값
+   *    3 인재   장수가 오고 가고 주인이 바뀐다.    까다로워야 한다
+   *    4 생사   사람이 죽고 군주가 갈린다.         가장 까다로워야 한다
+   *
+   *  warm : 시나리오 시작 후 이만큼 지나야 한다 (시작 직후 대사건 방지)
+   *  gap  : 같은 등급 이상의 사건 사이 최소 간격
+   *  mul  : 확률에 곱하는 값
+   * ──────────────────────────────────────────────────────────────── */
+  const TIER = {
+    0: { warm: 0,  gap: 0,  mul: 1    },
+    1: { warm: 0,  gap: 0,  mul: 1    },
+    2: { warm: 2,  gap: 0,  mul: 1    },
+    3: { warm: 8,  gap: 5,  mul: 0.8  },
+    4: { warm: 12, gap: 15, mul: 0.65 },
+  };
+  /* 이 사건이 지금 터져도 되는 판인가 — 개별 cond 와 별개로 걸리는 자물쇠 */
+  function tierOk(st, ev) {
+    const t = TIER[ev.tier === undefined ? 2 : ev.tier];
+    if (elapsed(st) < t.warm) return false;
+    if (t.gap) {
+      const m = mem(st);
+      for (const lv of Object.keys(m.tier)) {
+        if (+lv < (ev.tier || 0)) continue;
+        if (now(st) - m.tier[lv] < t.gap) return false;
+      }
+    }
+    return true;
+  }
+
   async function monthly(st, lines) {
     if (st.gameOver) return;
+    bookkeep(st);
     await lifecycle(st, lines);
     if (st.gameOver) return;
 
-    /* 사서 이벤트 : 한 달에 최대 두 건 */
-    let fired = 0;
+    /* 사서 이벤트 : 한 달에 최대 두 건, 판을 흔드는 사건은 한 건 */
+    let fired = 0, heavy = 0;
     for (const ev of storyList()) {
       if (fired >= 2) break;
+      const tier = ev.tier === undefined ? 2 : ev.tier;
+      if (tier >= 3 && heavy) continue;
       if (!ev.repeat && flag(st, ev.id)) continue;
       if (ev.repeat && since(st, ev.id) >= 0 && since(st, ev.id) < (ev.cool || 12)) continue;
+      if (!tierOk(st, ev)) continue;
       let ok = false;
       try { ok = ev.cond(st); } catch (e) { ok = false; }
       if (!ok) continue;
       const ch = typeof ev.chance === 'function' ? ev.chance(st) : (ev.chance === undefined ? 1 : ev.chance);
-      if (Math.random() > ch) continue;
+      if (Math.random() > ch * TIER[tier].mul) continue;
       setFlag(st, ev.id);
+      mem(st).tier[tier] = now(st);
       (st.hist || (st.hist = [])).push([st.year, st.month, ev.title || ev.id]);
       try { await ev.run(st, lines); } catch (e) { /* 한 이벤트의 실패가 진행을 막지 않는다 */ }
       fired++;
+      if (tier >= 3) heavy++;
       if (st.gameOver) return;
     }
     if (st.gameOver) return;
@@ -1003,18 +1148,43 @@ const Events = (() => {
       });
     }
 
+    /* 의형제 · 친분이 저절로 깊어지고 옅어진다 */
+    driftBonds(st);
+
     /* 임의 사건 — 한 달에 최대 두 건 */
     const bag = [];
-    RANDOM.forEach(e => { for (let i = 0; i < e.w; i++) bag.push(e); });
-    const rolls = Math.random() < 0.55 ? (Math.random() < 0.25 ? 2 : 1) : 0;
+    randomList().forEach(e => { for (let i = 0; i < (e.w || 2); i++) bag.push(e); });
+    const rolls = Math.random() < 0.6 ? (Math.random() < 0.3 ? 2 : 1) : 0;
     const used = new Set();
     for (let k = 0; k < rolls; k++) {
       const e = bag[rnd(bag.length)];
       if (used.has(e.id)) continue;
       used.add(e.id);
+      if (e.cond) { let ok = false; try { ok = e.cond(st); } catch (err) { ok = false; } if (!ok) continue; }
       try { await e.run(st, lines); } catch (err) { /* 사건 하나가 실패해도 진행 */ }
       if (st.gameOver) return;
     }
+  }
+
+  /* 같은 성에서 어깨를 맞대면 정이 붙고, 떨어져 지내면 옅어진다.
+     정이 깊은 둘은 서로의 충성을 붙들어 준다 — 장수 보유에는 손대지 않는다. */
+  function driftBonds(st) {
+    const m = mem(st);
+    Object.keys(m.bond).forEach(k => {
+      const [a, b] = k.split('|');
+      if (!alive(st, a) || !alive(st, b)) { return; }
+      if (together(st, a, b)) {
+        m.bond[k] = clamp(m.bond[k] + 1, 0, 100);
+        if (m.bond[k] >= 40) {
+          const ga = st.gens[a], gb = st.gens[b];
+          const lift = m.bond[k] >= 70 ? 2 : 1;
+          if (ga.clan >= 0) ga.loyal = clamp(ga.loyal + lift, 0, 100);
+          if (gb.clan >= 0) gb.loyal = clamp(gb.loyal + lift, 0, 100);
+        }
+      } else if (st.gens[a].clan !== st.gens[b].clan) {
+        m.bond[k] = clamp(m.bond[k] - 1, 0, 100);
+      }
+    });
   }
 
   /* AI 세력의 사서 진행 (플레이어가 유비가 아닐 때도 세상은 돈다) */
@@ -1038,7 +1208,15 @@ const Events = (() => {
     flag, setFlag, since, clanOf, isFree, alive, pc, pClan, pRuler, cities, capital,
     clanByRuler, clanGens, join, leave, S, cname, rr, rnd, clamp, scenes, grant,
     adjacentTo, anyCityOf, notify, deathMonth,
+    /* 조건을 까다롭게 쓰기 위한 것들 */
+    mem, elapsed, startYear, clanAny, ownerOf, everHeld, peakOf, tookFrom, sinceFell,
+    troopsOf, broken, declined, serves, cityOf, together, gone, captive,
+    bondOf, addBond, bondsOf,
   };
 
-  return { monthly, aiHistory, lifecycle, get STORY() { return storyList(); }, DIPLO, RANDOM, join, leave, api };
+  return {
+    monthly, aiHistory, lifecycle, bookkeep, tierOk, TIER,
+    get STORY() { return storyList(); }, get RANDOM_ALL() { return randomList(); },
+    DIPLO, RANDOM, join, leave, api,
+  };
 })();

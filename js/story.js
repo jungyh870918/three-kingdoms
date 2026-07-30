@@ -7,16 +7,28 @@ const STORY_EVENTS = (() => {
     flag, setFlag, since, clanOf, isFree, alive, pc, pClan, pRuler, cities, capital,
     clanByRuler, clanGens, join, leave, S, cname, rr, rnd, clamp, scenes, grant,
     adjacentTo, anyCityOf, notify,
+    mem, elapsed, startYear, clanAny, ownerOf, everHeld, peakOf, tookFrom, sinceFell,
+    troopsOf, broken, declined, serves, cityOf, together, gone, captive,
+    bondOf, addBond, bondsOf,
   } = Events.api;
+
+  /* 형주 — 유비가 유표에게 몸을 붙이고 있던 땅. 와룡을 만나려면 이 안에 있어야 한다 */
+  const HYEONGJU = [25, 26, 27, 30, 31, 32, 37, 38];
 
   return [
 
 
     /* ── 와룡봉추 : 수경선생 ─────────────────────────────────────── */
     {
-      id: 'sugyeong', title: '수경선생',
-      cond: st => pRuler(st) === '유비' && isFree(st, '제갈량') && alive(st, '사마휘') && !flag(st, 'sugyeong'),
-      chance: st => cities(st, pc(st)).some(id => [25, 26, 27, 30, 19, 18, 31, 32].includes(id)) ? 0.5 : 0.12,
+      id: 'sugyeong', title: '수경선생', tier: 0,
+      /*  와룡을 얻는 길은 여기서부터 좁다.
+       *  유비가 형주 땅에 발을 딛고, 관우·장비를 데리고 있고, 아직 크지 않아야 한다.
+       *  군웅할거에서 서주를 차지하고 하북으로 뻗은 유비에게는 수경선생이 오지 않는다. */
+      cond: st => pRuler(st) === '유비' && isFree(st, '제갈량') && alive(st, '사마휘') &&
+        st.year >= 200 && cities(st, pc(st)).some(id => HYEONGJU.includes(id)) &&
+        cities(st, pc(st)).length <= 4 &&
+        ['관우', '장비'].every(n => serves(st, n, pc(st))),
+      chance: st => cities(st, pc(st)).includes(25) ? 0.5 : 0.25,
       run: async st => {
         await UI.banner('수경선생');
         await UI.speech('사마휘', '길 가는 나그네가 어찌 이런 산속까지 오셨소.\n허나 좌우에 인물이 없으니 그 고생이 끝이 없을 것이오.', '수경선생 사마휘');
@@ -28,8 +40,9 @@ const STORY_EVENTS = (() => {
 
     /* ── 단복 서서, 유비를 찾다 ──────────────────────────────────── */
     {
-      id: 'seoseo_join', title: '단복(單福)',
-      cond: st => pRuler(st) === '유비' && since(st, 'sugyeong') >= 2 && isFree(st, '서서') && capital(st),
+      id: 'seoseo_join', title: '단복(單福)', tier: 3,
+      cond: st => pRuler(st) === '유비' && since(st, 'sugyeong') >= 2 && isFree(st, '서서') &&
+        cities(st, pc(st)).some(id => HYEONGJU.includes(id)) && cities(st, pc(st)).length <= 5,
       chance: () => 0.45,
       run: async st => {
         const cid = capital(st);
@@ -45,9 +58,13 @@ const STORY_EVENTS = (() => {
 
     /* ── 서서, 어머니 때문에 떠나며 제갈량을 천거하다 ─────────────── */
     {
-      id: 'seoseo_leave', title: '서서주마천제갈',
-      cond: st => clanOf(st, '서서') === pc(st) && since(st, 'seoseo_in') >= 6 &&
-        st.clans.some(c => c.alive && c.ruler === '조조') && isFree(st, '제갈량'),
+      id: 'seoseo_leave', title: '서서주마천제갈', tier: 3,
+      /* 조조가 서서의 어미를 붙잡을 만한 처지여야 한다 — 조조가 크고, 유비와 맞닿아 있을 때 */
+      cond: st => {
+        const cao = clanByRuler(st, '조조'); if (!cao) return false;
+        return clanOf(st, '서서') === pc(st) && since(st, 'seoseo_in') >= 6 && isFree(st, '제갈량') &&
+          cities(st, cao.id).length >= 6 && cities(st, pc(st)).length <= 6;
+      },
       chance: () => 0.4,
       run: async st => {
         await UI.banner('서서, 말을 달려 제갈량을 천거하다');
@@ -67,8 +84,11 @@ const STORY_EVENTS = (() => {
 
     /* ── 삼고초려 ────────────────────────────────────────────────── */
     {
-      id: 'samgo', title: '삼고초려',
-      cond: st => pRuler(st) === '유비' && flag(st, 'jegal_ready') && isFree(st, '제갈량') && capital(st),
+      id: 'samgo', title: '삼고초려', tier: 3,
+      /* 융중은 양양 옆이다. 형주에 있지 않으면 세 번을 찾아갈 길이 없다 */
+      cond: st => pRuler(st) === '유비' && flag(st, 'jegal_ready') && isFree(st, '제갈량') &&
+        capital(st) && cities(st, pc(st)).some(id => HYEONGJU.includes(id)) &&
+        cities(st, pc(st)).length <= 6 && ['관우', '장비'].some(n => serves(st, n, pc(st))),
       chance: () => 0.6,
       run: async st => {
         const cid = capital(st);
@@ -105,7 +125,7 @@ const STORY_EVENTS = (() => {
 
     /* ── 봉추 방통 ───────────────────────────────────────────────── */
     {
-      id: 'bongchu', title: '봉추 방통',
+      id: 'bongchu', title: '봉추 방통', tier: 3,
       cond: st => flag(st, 'jegal_in') && clanOf(st, '제갈량') === pc(st) && isFree(st, '방통') && capital(st),
       chance: () => 0.3,
       run: async st => {
@@ -120,7 +140,7 @@ const STORY_EVENTS = (() => {
 
     /* ── 오호대장군 ──────────────────────────────────────────────── */
     {
-      id: 'ohoo', title: '오호대장군',
+      id: 'ohoo', title: '오호대장군', tier: 1,
       cond: st => pRuler(st) === '유비' && cities(st, pc(st)).includes(41) &&
         ['관우', '장비', '조운', '마초', '황충'].filter(n => clanOf(st, n) === pc(st)).length >= 4,
       chance: () => 1,
@@ -138,7 +158,7 @@ const STORY_EVENTS = (() => {
 
     /* ── 출사표 ──────────────────────────────────────────────────── */
     {
-      id: 'chulsa', title: '출사표',
+      id: 'chulsa', title: '출사표', tier: 1,
       cond: st => clanOf(st, '제갈량') === pc(st) && cities(st, pc(st)).includes(17) && st.year >= 224,
       chance: () => 0.8,
       run: async st => {
@@ -159,7 +179,7 @@ const STORY_EVENTS = (() => {
 
     /* ── 강유 귀순 ───────────────────────────────────────────────── */
     {
-      id: 'gangyu', title: '기산의 젊은 장수',
+      id: 'gangyu', title: '기산의 젊은 장수', tier: 3,
       cond: st => clanOf(st, '제갈량') === pc(st) && cities(st, pc(st)).includes(15) && alive(st, '강유') &&
         clanOf(st, '강유') !== pc(st),
       chance: () => 0.7,
@@ -173,7 +193,7 @@ const STORY_EVENTS = (() => {
 
     /* ── 연환계 ──────────────────────────────────────────────────── */
     {
-      id: 'yeonhwan', title: '연환계',
+      id: 'yeonhwan', title: '연환계', tier: 3,
       cond: st => {
         const d = clanByRuler(st, '동탁');
         return d && clanOf(st, '여포') === d.id && st.year >= 191 && alive(st, '왕윤');
@@ -194,7 +214,7 @@ const STORY_EVENTS = (() => {
 
     /* ── 동탁 주살 ───────────────────────────────────────────────── */
     {
-      id: 'dongtak_dead', title: '동탁 주살',
+      id: 'dongtak_dead', title: '동탁 주살', tier: 4,
       cond: st => {
         const d = clanByRuler(st, '동탁');
         return d && d.id !== pc(st) && flag(st, 'yeonhwan') && since(st, 'yeonhwan') >= 2 &&
@@ -238,7 +258,7 @@ const STORY_EVENTS = (() => {
 
     /* ── 헌제 옹립 ───────────────────────────────────────────────── */
     {
-      id: 'cheonja', title: '천자를 받들다',
+      id: 'cheonja', title: '천자를 받들다', tier: 2,
       cond: st => st.year >= 196 && [20, 12].some(id => st.cities[id].clan === pc(st)),
       chance: () => 0.5,
       run: async st => {
@@ -254,7 +274,7 @@ const STORY_EVENTS = (() => {
 
     /* ── 관도 : 오소의 불길 ──────────────────────────────────────── */
     {
-      id: 'gwando', title: '오소를 불사르다',
+      id: 'gwando', title: '오소를 불사르다', tier: 3,
       cond: st => {
         const cao = clanByRuler(st, '조조'), won = clanByRuler(st, '원소');
         if (!cao || !won || st.year < 199) return false;
@@ -282,7 +302,7 @@ const STORY_EVENTS = (() => {
 
     /* ── 적벽 ────────────────────────────────────────────────────── */
     {
-      id: 'jeokbyeok', title: '적벽대전',
+      id: 'jeokbyeok', title: '적벽대전', tier: 3,
       cond: st => {
         const cao = clanByRuler(st, '조조');
         if (!cao || st.year < 207) return false;
@@ -311,7 +331,7 @@ const STORY_EVENTS = (() => {
 
     /* ── 손·유 동맹 (플레이어가 손씨 또는 유비일 때) ─────────────── */
     {
-      id: 'sonyu', title: '손유동맹',
+      id: 'sonyu', title: '손유동맹', tier: 3,
       cond: st => {
         const cao = clanByRuler(st, '조조');
         if (!cao || st.year < 207) return false;
@@ -344,7 +364,7 @@ const STORY_EVENTS = (() => {
 
     /* ── 적로마 ──────────────────────────────────────────────────── */
     {
-      id: 'jeokro', title: '적로, 단계를 뛰다',
+      id: 'jeokro', title: '적로, 단계를 뛰다', tier: 2,
       cond: st => pRuler(st) === '유비' && cities(st, pc(st)).some(id => [25, 26].includes(id)) && st.year >= 200,
       chance: () => 0.25,
       run: async st => {
@@ -359,7 +379,7 @@ const STORY_EVENTS = (() => {
 
     /* ── 칠종칠금 ────────────────────────────────────────────────── */
     {
-      id: 'chiljong', title: '칠종칠금',
+      id: 'chiljong', title: '칠종칠금', tier: 3,
       cond: st => clanOf(st, '제갈량') === pc(st) && alive(st, '맹획') &&
         cities(st, pc(st)).some(id => [43, 44].includes(id)) === false &&
         cities(st, pc(st)).includes(42) && st.year >= 220,
@@ -383,7 +403,7 @@ const STORY_EVENTS = (() => {
      *  반동탁 연합 · 동탁의 낙양
      * ══════════════════════════════════════════════════════════════ */
     {
-      id: 'yeonhap', title: '반동탁 연합',
+      id: 'yeonhap', title: '반동탁 연합', tier: 2,
       cond: st => {
         const d = clanByRuler(st, '동탁');
         return d && st.year <= 192 && pc(st) !== d.id && cities(st, pc(st)).length >= 1;
@@ -407,7 +427,7 @@ const STORY_EVENTS = (() => {
       },
     },
     {
-      id: 'hwaung', title: '사수관의 화웅',
+      id: 'hwaung', title: '사수관의 화웅', tier: 3,
       cond: st => {
         const d = clanByRuler(st, '동탁');
         return d && flag(st, 'yeonhap') && alive(st, '화웅') && st.year <= 193 && pc(st) !== d.id;
@@ -434,7 +454,7 @@ const STORY_EVENTS = (() => {
       },
     },
     {
-      id: 'samyoung', title: '호로관 삼영전여포',
+      id: 'samyoung', title: '호로관 삼영전여포', tier: 1,
       cond: st => {
         const d = clanByRuler(st, '동탁');
         return d && flag(st, 'yeonhap') && clanOf(st, '여포') === d.id &&
@@ -456,7 +476,7 @@ const STORY_EVENTS = (() => {
       },
     },
     {
-      id: 'nakyang', title: '낙양 천도',
+      id: 'nakyang', title: '낙양 천도', tier: 3,
       cond: st => {
         const d = clanByRuler(st, '동탁');
         return d && st.cities[12].clan === d.id && (flag(st, 'yeonhap') || st.year >= 191);
@@ -484,7 +504,7 @@ const STORY_EVENTS = (() => {
       },
     },
     {
-      id: 'oksae', title: '전국옥새',
+      id: 'oksae', title: '전국옥새', tier: 2,
       cond: st => flag(st, 'nakyang_fire') && st.cities[12].clan >= 0 &&
         !Object.values(st.gens).some(g => (g.items || []).includes('전국옥새')),
       chance: () => 0.6,
@@ -507,7 +527,7 @@ const STORY_EVENTS = (() => {
       },
     },
     {
-      id: 'igak', title: '이각·곽사의 난',
+      id: 'igak', title: '이각·곽사의 난', tier: 4,
       cond: st => flag(st, 'dongtak_dead') && since(st, 'dongtak_dead') >= 2 && alive(st, '왕윤'),
       chance: () => 0.7,
       run: async (st, lines) => {
@@ -529,7 +549,7 @@ const STORY_EVENTS = (() => {
       },
     },
     {
-      id: 'heonje', title: '헌제, 동쪽으로',
+      id: 'heonje', title: '헌제, 동쪽으로', tier: 2,
       cond: st => flag(st, 'igak_nan') && since(st, 'igak_nan') >= 3 && !flag(st, 'cheonja') &&
         [12, 20, 11, 7].some(id => st.cities[id].clan === pc(st)),
       chance: () => 0.6,
@@ -557,7 +577,7 @@ const STORY_EVENTS = (() => {
      *  여포와 서주
      * ══════════════════════════════════════════════════════════════ */
     {
-      id: 'wonmun', title: '원문사극',
+      id: 'wonmun', title: '원문사극', tier: 2,
       cond: st => {
         const y = clanByRuler(st, '여포'), w = clanByRuler(st, '원술'), l = clanByRuler(st, '유비');
         return y && w && l && adjacentTo(st, y.id, l.id) && [y.id, w.id, l.id].includes(pc(st));
@@ -578,10 +598,13 @@ const STORY_EVENTS = (() => {
       },
     },
     {
-      id: 'baekmun', title: '백문루',
+      id: 'baekmun', title: '백문루', tier: 4,
       cond: st => {
-        const y = clanByRuler(st, '여포');
-        return y && cities(st, y.id).length <= 1 && st.clans.some(c => c.alive && c.ruler === '조조' && adjacentTo(st, c.id, y.id));
+        const y = clanByRuler(st, '여포'); if (!y) return false;
+        const cao = clanByRuler(st, '조조'); if (!cao) return false;
+        /* 여포가 한때 여러 성을 쥐었다가 다 잃고, 조조에게 포위되었을 때만 */
+        return broken(st, y.id) && peakOf(st, y.id) >= 2 && st.year >= 196 &&
+          adjacentTo(st, cao.id, y.id) && cities(st, cao.id).length >= 4;
       },
       chance: () => 0.5,
       run: async (st, lines) => {
@@ -606,7 +629,7 @@ const STORY_EVENTS = (() => {
       },
     },
     {
-      id: 'cheongmae', title: '청매자주론영웅',
+      id: 'cheongmae', title: '청매자주론영웅', tier: 0,
       cond: st => {
         const cao = clanByRuler(st, '조조');
         return cao && pRuler(st) === '유비' && cities(st, pc(st)).length <= 2 &&
@@ -632,7 +655,7 @@ const STORY_EVENTS = (() => {
      *  조조
      * ══════════════════════════════════════════════════════════════ */
     {
-      id: 'seoju_bok', title: '서주의 원한',
+      id: 'seoju_bok', title: '서주의 원한', tier: 2,
       cond: st => {
         const cao = clanByRuler(st, '조조'), do_ = clanByRuler(st, '도겸');
         return cao && do_ && adjacentTo(st, cao.id, do_.id) && st.year >= 193;
@@ -657,10 +680,11 @@ const STORY_EVENTS = (() => {
       },
     },
     {
-      id: 'wanseong', title: '완성의 밤',
+      id: 'wanseong', title: '완성의 밤', tier: 4,
       cond: st => {
         const cao = clanByRuler(st, '조조');
-        return cao && cities(st, cao.id).includes(19) && alive(st, '전위') && st.year >= 196;
+        return cao && cities(st, cao.id).includes(19) && st.year >= 196 &&
+          serves(st, '전위', cao.id) && sinceFell(st, 19) <= 12;
       },
       chance: () => 0.5,
       run: async (st, lines) => {
@@ -680,7 +704,7 @@ const STORY_EVENTS = (() => {
       },
     },
     {
-      id: 'dongjak', title: '동작대',
+      id: 'dongjak', title: '동작대', tier: 1,
       cond: st => {
         const cao = clanByRuler(st, '조조');
         return cao && cities(st, cao.id).length >= 14 && st.year >= 208 && cities(st, cao.id).includes(7);
@@ -705,7 +729,7 @@ const STORY_EVENTS = (() => {
       },
     },
     {
-      id: 'wiwang', title: '위왕 즉위',
+      id: 'wiwang', title: '위왕 즉위', tier: 1,
       cond: st => {
         const cao = clanByRuler(st, '조조');
         return cao && cities(st, cao.id).length >= 18 && st.year >= 212 && flag(st, 'cheonja');
@@ -730,10 +754,11 @@ const STORY_EVENTS = (() => {
       },
     },
     {
-      id: 'hwata', title: '화타',
+      id: 'hwata', title: '화타', tier: 4,
       cond: st => {
         const cao = clanByRuler(st, '조조');
-        return cao && st.year >= 207 && alive(st, '조조');
+        return cao && st.year >= 207 && alive(st, '조조') &&
+          elapsed(st) >= 24 && cities(st, cao.id).length >= 10;
       },
       chance: () => 0.35,
       run: async (st, lines) => {
@@ -763,10 +788,14 @@ const STORY_EVENTS = (() => {
       },
     },
     {
-      id: 'yodong_head', title: '요동의 선물',
+      id: 'yodong_head', title: '요동의 선물', tier: 4,
       cond: st => {
         const cao = clanByRuler(st, '조조'), gs = clanByRuler(st, '공손강');
-        return cao && gs && st.year >= 206 && ['원상', '원희'].some(n => alive(st, n));
+        if (!cao || !gs || st.year < 206 || alive(st, '원소')) return false;
+        /* 원씨 형제가 요동에 몸을 붙였거나, 세력이 이미 무너졌을 때 */
+        return ['원상', '원희'].some(n => alive(st, n) &&
+          (clanOf(st, n) === gs.id || isFree(st, n) || captive(st, n) ||
+           (clanOf(st, n) >= 0 && broken(st, clanOf(st, n)))));
       },
       chance: () => 0.5,
       run: async (st, lines) => {
@@ -789,7 +818,7 @@ const STORY_EVENTS = (() => {
      *  원가
      * ══════════════════════════════════════════════════════════════ */
     {
-      id: 'wonsul_ching', title: '원술 칭제',
+      id: 'wonsul_ching', title: '원술 칭제', tier: 2,
       cond: st => {
         const w = clanByRuler(st, '원술');
         return w && st.year >= 196 && cities(st, w.id).length >= 2;
@@ -810,10 +839,11 @@ const STORY_EVENTS = (() => {
       },
     },
     {
-      id: 'wonsul_end', title: '원술의 최후',
+      id: 'wonsul_end', title: '원술의 최후', tier: 4,
       cond: st => {
         const w = clanByRuler(st, '원술');
-        return w && flag(st, 'wonsul_ching') && (cities(st, w.id).length <= 1 || st.year >= 199);
+        return w && flag(st, 'wonsul_ching') && since(st, 'wonsul_ching') >= 12 &&
+          (broken(st, w.id) || (st.year >= 199 && declined(st, w.id, 0.5)));
       },
       chance: () => 0.6,
       run: async (st, lines) => {
@@ -830,12 +860,13 @@ const STORY_EVENTS = (() => {
       },
     },
     {
-      id: 'won_split', title: '원씨 형제의 분열',
+      id: 'won_split', title: '원씨 형제의 분열', tier: 3,
       cond: st => {
         const cl = st.clans.find(c => c.alive && ['원상', '원담'].includes(c.ruler));
         if (!cl) return false;
         const other = cl.ruler === '원상' ? '원담' : '원상';
-        return alive(st, other) && clanOf(st, other) === cl.id && cities(st, cl.id) >= 2;
+        return alive(st, other) && clanOf(st, other) === cl.id && cities(st, cl.id).length >= 2 &&
+          !alive(st, '원소');
       },
       chance: () => 0.4,
       run: async (st, lines) => {
@@ -871,10 +902,13 @@ const STORY_EVENTS = (() => {
      *  손씨
      * ══════════════════════════════════════════════════════════════ */
     {
-      id: 'taesaja', title: '신정의 겨룸',
+      id: 'taesaja', title: '신정의 겨룸', tier: 3,
       cond: st => {
         const sn = st.clans.find(c => c.alive && ['손책', '손견', '손권'].includes(c.ruler));
-        return sn && alive(st, '태사자') && clanOf(st, '태사자') !== sn.id && st.year >= 194;
+        if (!sn || !alive(st, '태사자') || clanOf(st, '태사자') === sn.id || st.year < 194) return false;
+        const ci = clanOf(st, '태사자');
+        return (ci < 0 || broken(st, ci) || captive(st, '태사자')) &&
+          (ci < 0 || adjacentTo(st, sn.id, ci));
       },
       chance: () => 0.4,
       run: async (st, lines) => {
@@ -892,10 +926,11 @@ const STORY_EVENTS = (() => {
       },
     },
     {
-      id: 'ugil', title: '우길의 저주',
+      id: 'ugil', title: '우길의 저주', tier: 4,
       cond: st => {
         const sn = clanByRuler(st, '손책');
-        return sn && st.year >= 199;
+        return sn && st.year >= 199 && elapsed(st) >= 18 &&
+          (flag(st, 'gangdong') || cities(st, sn.id).length >= 4);
       },
       chance: () => 0.4,
       run: async (st, lines) => {
@@ -913,7 +948,7 @@ const STORY_EVENTS = (() => {
       },
     },
     {
-      id: 'gamnyeong_night', title: '감녕의 백기 야습',
+      id: 'gamnyeong_night', title: '감녕의 백기 야습', tier: 2,
       cond: st => {
         const g = st.gens['감녕'];
         return g && g.clan >= 0 && Game.ADJ[g.city] &&
@@ -938,13 +973,18 @@ const STORY_EVENTS = (() => {
       },
     },
     {
-      id: 'baekui', title: '백의도강',
+      id: 'baekui', title: '백의도강', tier: 4,
       cond: st => {
         const sn = st.clans.find(c => c.alive && ['손권', '손책'].includes(c.ruler));
         if (!sn || !alive(st, '여몽') || clanOf(st, '여몽') !== sn.id) return false;
         const gw = st.gens['관우'];
         if (!gw || gw.clan < 0 || gw.clan === sn.id) return false;
-        return [26, 30, 27].includes(gw.city) && adjacentTo(st, sn.id, gw.clan);
+        if (st.year < 214 || sn.allies[gw.clan]) return false;
+        if (!alive(st, '육손')) return false;
+        /* 관우가 형주에 홀로 남고, 본군은 딴 곳에 있을 때 — 스스로 만든 빈틈이다 */
+        const alone = st.cities[gw.city].gens.filter(n => n !== '관우' && n !== '관평').length <= 1;
+        const away = cities(st, gw.clan).length >= 3;
+        return [26, 30, 27].includes(gw.city) && adjacentTo(st, sn.id, gw.clan) && alone && away;
       },
       chance: () => 0.35,
       run: async (st, lines) => {
@@ -972,7 +1012,7 @@ const STORY_EVENTS = (() => {
       },
     },
     {
-      id: 'iryeong', title: '이릉대전',
+      id: 'iryeong', title: '이릉대전', tier: 3,
       cond: st => {
         if (!flag(st, 'gwanwoo_dead')) return false;
         const lb = st.clans.find(c => c.alive && c.ruler === '유비');
@@ -1009,9 +1049,9 @@ const STORY_EVENTS = (() => {
       },
     },
     {
-      id: 'baekje', title: '백제성 탁고',
-      cond: st => flag(st, 'iryeong') && alive(st, '유비') && alive(st, '제갈량') &&
-        clanOf(st, '제갈량') === clanOf(st, '유비'),
+      id: 'baekje', title: '백제성 탁고', tier: 4,
+      cond: st => flag(st, 'iryeong') && since(st, 'iryeong') >= 4 &&
+        alive(st, '유비') && alive(st, '제갈량') && clanOf(st, '제갈량') === clanOf(st, '유비'),
       chance: () => 0.5,
       run: async (st, lines) => {
         const cl = st.clans[clanOf(st, '유비')];
@@ -1031,7 +1071,7 @@ const STORY_EVENTS = (() => {
      *  유비 · 촉
      * ══════════════════════════════════════════════════════════════ */
     {
-      id: 'jangpan', title: '장판파',
+      id: 'jangpan', title: '장판파', tier: 2,
       cond: st => {
         const lb = st.clans.find(c => c.alive && c.ruler === '유비');
         if (!lb || cities(st, lb.id).length > 2) return false;
@@ -1057,7 +1097,7 @@ const STORY_EVENTS = (() => {
       },
     },
     {
-      id: 'hyeongju_dae', title: '형주를 빌리다',
+      id: 'hyeongju_dae', title: '형주를 빌리다', tier: 3,
       cond: st => {
         const lb = st.clans.find(c => c.alive && c.ruler === '유비');
         const sn = st.clans.find(c => c.alive && ['손권', '손책'].includes(c.ruler));
@@ -1089,7 +1129,7 @@ const STORY_EVENTS = (() => {
       },
     },
     {
-      id: 'seocheon', title: '서천으로',
+      id: 'seocheon', title: '서천으로', tier: 3,
       cond: st => {
         const lb = st.clans.find(c => c.alive && c.ruler === '유비');
         const ly = clanByRuler(st, '유장');
@@ -1119,7 +1159,7 @@ const STORY_EVENTS = (() => {
       },
     },
     {
-      id: 'hanjungwang', title: '한중왕',
+      id: 'hanjungwang', title: '한중왕', tier: 1,
       cond: st => pRuler(st) === '유비' && cities(st, pc(st)).includes(17) && cities(st, pc(st)).length >= 8,
       chance: () => 0.8,
       run: async (st, lines) => {
@@ -1135,9 +1175,9 @@ const STORY_EVENTS = (() => {
       },
     },
     {
-      id: 'eupcham', title: '읍참마속',
+      id: 'eupcham', title: '읍참마속', tier: 4,
       cond: st => clanOf(st, '제갈량') === pc(st) && clanOf(st, '마속') === pc(st) &&
-        cities(st, pc(st)).includes(17) && st.year >= 226,
+        cities(st, pc(st)).includes(17) && st.year >= 226 && flag(st, 'chulsa'),
       chance: () => 0.5,
       run: async (st, lines) => {
         await UI.banner('가정을 잃다');
@@ -1161,7 +1201,7 @@ const STORY_EVENTS = (() => {
       },
     },
     {
-      id: 'mokwoo', title: '목우유마',
+      id: 'mokwoo', title: '목우유마', tier: 1,
       cond: st => clanOf(st, '제갈량') === pc(st) && cities(st, pc(st)).includes(17) && st.year >= 230,
       chance: () => 0.6,
       run: async (st, lines) => {
@@ -1175,9 +1215,10 @@ const STORY_EVENTS = (() => {
       },
     },
     {
-      id: 'ojangwon', title: '오장원',
+      id: 'ojangwon', title: '오장원', tier: 4,
       cond: st => alive(st, '제갈량') && clanOf(st, '제갈량') >= 0 && st.year >= 233 &&
-        cities(st, clanOf(st, '제갈량')).includes(17),
+        cities(st, clanOf(st, '제갈량')).includes(17) && elapsed(st) >= 18 &&
+        (flag(st, 'chulsa') || flag(st, 'mokwoo') || flag(st, 'jinchang') || flag(st, 'samaui_su')),
       chance: () => 0.5,
       run: async (st, lines) => {
         const ci = clanOf(st, '제갈량');
@@ -1196,11 +1237,11 @@ const STORY_EVENTS = (() => {
       },
     },
     {
-      id: 'gopyeong', title: '고평릉의 변',
+      id: 'gopyeong', title: '고평릉의 변', tier: 4,
       cond: st => {
         const ci = clanOf(st, '사마의');
         return ci >= 0 && st.year >= 245 && st.clans[ci] && st.clans[ci].ruler !== '사마의' &&
-          cities(st, ci).length >= 6;
+          cities(st, ci).length >= 6 && elapsed(st) >= 18 && st.gens['사마의'].loyal < 80;
       },
       chance: () => 0.5,
       run: async (st, lines) => {
@@ -1224,7 +1265,7 @@ const STORY_EVENTS = (() => {
      *  기연 · 이민족
      * ══════════════════════════════════════════════════════════════ */
     {
-      id: 'jeokto_bul', title: '적토마',
+      id: 'jeokto_bul', title: '적토마', tier: 2,
       cond: st => clanOf(st, '여포') >= 0 && !((st.gens['여포'].items || []).includes('적토마')) && st.year <= 198,
       chance: () => 0.5,
       run: async (st, lines) => {
@@ -1238,7 +1279,7 @@ const STORY_EVENTS = (() => {
       },
     },
     {
-      id: 'gwanro', title: '관로의 점',
+      id: 'gwanro', title: '관로의 점', tier: 0,
       cond: st => st.year >= 200 && cities(st, pc(st)).length >= 3,
       chance: () => 0.25, repeat: true, cool: 36,
       run: async (st, lines) => {
@@ -1258,7 +1299,7 @@ const STORY_EVENTS = (() => {
       },
     },
     {
-      id: 'ohwan', title: '오환의 침입',
+      id: 'ohwan', title: '오환의 침입', tier: 2,
       cond: st => cities(st, pc(st)).some(id => [1, 2, 3, 16, 14].includes(id)),
       chance: () => 0.3, repeat: true, cool: 24,
       run: async (st, lines) => {
@@ -1282,7 +1323,7 @@ const STORY_EVENTS = (() => {
       },
     },
     {
-      id: 'namman_chim', title: '남만의 봉기',
+      id: 'namman_chim', title: '남만의 봉기', tier: 2,
       cond: st => alive(st, '맹획') && cities(st, pc(st)).some(id => [41, 42, 43, 44, 45, 46, 37, 38].includes(id)),
       chance: () => 0.3, repeat: true, cool: 30,
       run: async (st, lines) => {
@@ -1301,7 +1342,7 @@ const STORY_EVENTS = (() => {
      *  황건 · 후한 말
      * ══════════════════════════════════════════════════════════════ */
     {
-      id: 'hwangeon', title: '창천이 이미 죽었다',
+      id: 'hwangeon', title: '창천이 이미 죽었다', tier: 1,
       cond: st => clanByRuler(st, '장각') && st.year <= 186 && pc(st) !== clanByRuler(st, '장각').id,
       chance: () => 0.8,
       run: async (st, lines) => {
@@ -1322,8 +1363,14 @@ const STORY_EVENTS = (() => {
       },
     },
     {
-      id: 'janggak_death', title: '장각의 죽음',
-      cond: st => clanByRuler(st, '장각') && st.year >= 184 && alive(st, '장각'),
+      id: 'janggak_death', title: '장각의 죽음', tier: 4,
+      cond: st => {
+        const jg = clanByRuler(st, '장각');
+        if (!jg || !alive(st, '장각')) return false;
+        /* 황건으로 플레이하는 사람의 판을 첫해에 끝내지 않는다 */
+        if (jg.id === pc(st)) return elapsed(st) >= 24 && declined(st, jg.id, 0.7);
+        return st.year >= 185 || elapsed(st) >= 10;
+      },
       chance: () => 0.25,
       run: async (st, lines) => {
         const jg = clanByRuler(st, '장각');
@@ -1343,8 +1390,8 @@ const STORY_EVENTS = (() => {
       },
     },
     {
-      id: 'sipsangsi', title: '십상시의 난',
-      cond: st => clanByRuler(st, '하진') && st.year >= 185,
+      id: 'sipsangsi', title: '십상시의 난', tier: 4,
+      cond: st => clanByRuler(st, '하진') && st.year >= 188 && elapsed(st) >= 6,
       chance: () => 0.4,
       run: async (st, lines) => {
         const hj = clanByRuler(st, '하진');
@@ -1369,7 +1416,7 @@ const STORY_EVENTS = (() => {
      *  공손찬과 하북
      * ══════════════════════════════════════════════════════════════ */
     {
-      id: 'baekma', title: '백마의종',
+      id: 'baekma', title: '백마의종', tier: 1,
       cond: st => pRuler(st) === '공손찬' && cities(st, pc(st)).length >= 1,
       chance: () => 0.7,
       run: async (st, lines) => {
@@ -1388,7 +1435,7 @@ const STORY_EVENTS = (() => {
       },
     },
     {
-      id: 'gyegyo', title: '계교의 강노',
+      id: 'gyegyo', title: '계교의 강노', tier: 2,
       cond: st => {
         const gs = clanByRuler(st, '공손찬'), wn = clanByRuler(st, '원소');
         return gs && wn && adjacentTo(st, gs.id, wn.id) && alive(st, '국의');
@@ -1414,10 +1461,12 @@ const STORY_EVENTS = (() => {
       },
     },
     {
-      id: 'yeokgyeong', title: '역경루',
+      id: 'yeokgyeong', title: '역경루', tier: 4,
       cond: st => {
-        const gs = clanByRuler(st, '공손찬');
-        return gs && cities(st, gs.id).length <= 1 && st.year >= 197;
+        const gs = clanByRuler(st, '공손찬'); if (!gs) return false;
+        const wn = clanByRuler(st, '원소');
+        return broken(st, gs.id) && peakOf(st, gs.id) >= 3 && st.year >= 197 &&
+          (!wn || adjacentTo(st, wn.id, gs.id) || cities(st, wn.id).length >= 8);
       },
       chance: () => 0.5,
       run: async (st, lines) => {
@@ -1436,61 +1485,121 @@ const STORY_EVENTS = (() => {
     /* ═══════════════════════════════════════════════════════════════
      *  관우 · 삼형제
      * ══════════════════════════════════════════════════════════════ */
+    /*  이 넉 줄은 반드시 이 순서로만 흐른다.
+     *    ① 서주가 조조 손에 넘어가고 유비군이 흩어진다   → sam_scatter
+     *    ② 갈 곳 없는 관우가 조건을 걸고 조조에게 의탁    → gwanwoo_cao
+     *    ③ 유비가 다시 땅을 얻자 관우가 인수를 걸고 떠난다 → gwanwoo_back
+     *    ④ 관우와 장비가 한 성에서 다시 만난다
+     *  ①이 서지 않으면 ②는 영원히 서지 않는다. 유비가 서주에 멀쩡히 앉아 있는
+     *  동안에는 어느 시나리오에서도 관우가 조조에게 가지 않는다. */
     {
-      id: 'gwanwoo_uitak', title: '관우, 조조에게 의탁하다',
+      id: 'sam_isan', title: '서주 함락 — 삼형제, 흩어지다', tier: 2,
       cond: st => {
-        const lb = st.clans.find(c => c.alive && c.ruler === '유비');
-        const cao = clanByRuler(st, '조조');
-        return lb && cao && clanOf(st, '관우') === lb.id && cities(st, lb.id).length <= 1 &&
-          adjacentTo(st, cao.id, lb.id) && st.year <= 205;
+        const cao = clanByRuler(st, '조조'); if (!cao) return false;
+        const lb = clanAny(st, '유비'); if (!lb) return false;
+        if (!alive(st, '유비') || !alive(st, '관우') || !alive(st, '장비')) return false;
+        if (st.year > 205 || flag(st, 'jegal_in')) return false;
+        /* 유비가 딛고 있던 땅이 — 서주권이면 서주권, 아니면 가졌던 땅 전부가 — 조조의 것이 되었는가 */
+        const held = Object.keys(mem(st).held[lb.id] || {}).map(Number);
+        if (!held.length) return false;
+        const seoju = [21, 22].filter(id => held.includes(id));
+        const home = seoju.length ? seoju : held;
+        if (!home.every(id => ownerOf(st, id) === cao.id)) return false;
+        /* 그리고 유비군이 실제로 무너졌는가 */
+        return !lb.alive || broken(st, lb.id);
       },
-      chance: () => 0.3,
+      chance: () => 0.75,
+      run: async (st, lines) => {
+        await UI.banner('서주, 하룻밤에 무너지다');
+        await scenes([
+          ['조조', '유비는 사람을 얻는 재주가 있으나 땅을 지키는 재주가 없다.\n서주를 비운 사이에 성을 취하라.', '조조'],
+          ['장비', '술에 취해 성을 잃었소…\n형님, 이 아우를 베어 주시오!', '장비 창을 던지며'],
+          ['유비', '성은 다시 얻으면 된다.\n사람이 상하지 않았으니 그것으로 되었다.', '유비'],
+        ]);
+        await UI.speech('관우', '형님과 아우의 소식을 알 수 없습니다.\n형수님을 모시고 성에 남았으나, 사방이 조조의 군입니다…', '관우, 하비에 남아');
+        setFlag(st, 'sam_scatter');
+        ['관우', '장비'].forEach(n => {
+          if (clanOf(st, n) >= 0) st.gens[n].loyal = clamp(st.gens[n].loyal - 6, 0, 100);
+        });
+        lines.push(`${UI.rd('유비군이 서주에서 흩어졌습니다')}`);
+      },
+    },
+    {
+      id: 'gwanwoo_uitak', title: '관우, 조조에게 의탁하다', tier: 3,
+      cond: st => {
+        const cao = clanByRuler(st, '조조'); if (!cao) return false;
+        if (!flag(st, 'sam_scatter') || since(st, 'sam_scatter') < 1) return false;
+        if (!alive(st, '관우') || !alive(st, '유비')) return false;
+        if (clanOf(st, '관우') === cao.id || flag(st, 'gwanwoo_cao')) return false;
+        if (st.year > 205 || flag(st, 'jegal_in')) return false;
+        const lb = clanAny(st, '유비');
+        /* 유비가 아직 서 있다면, 관우가 그 곁을 떠나 홀로 남아 있어야 한다 */
+        if (lb && lb.alive && clanOf(st, '관우') === lb.id) {
+          if (together(st, '관우', '유비')) return false;
+          if (!broken(st, lb.id)) return false;
+        }
+        /* 관우가 조조의 손아귀에 있어야 한다 — 포로이거나, 조조 군에 둘러싸였거나 */
+        if (captive(st, '관우')) return true;
+        const city = cityOf(st, '관우');
+        return city > 0 && Game.ADJ[city] &&
+          (ownerOf(st, city) === cao.id || Game.ADJ[city].some(id => ownerOf(st, id) === cao.id));
+      },
+      chance: () => 0.4,
       run: async (st, lines) => {
         const cao = clanByRuler(st, '조조');
         await UI.banner('세 가지 조건');
         await scenes([
+          ['장료', '공은 지금 죽어도 형수를 지킬 수 없고,\n형님의 소식도 끝내 듣지 못하오.\n한 번 굽히는 것이 도리어 의(義)일 수 있소.', '장료, 성 아래에서'],
           ['관우', '항복하는 것은 한실이지 조공이 아니오.\n형수를 지킬 것이며, 형님의 소식을 들으면 곧바로 떠나겠소.\n이 셋을 받아들인다면 창을 놓겠소.', '관우 세 조건'],
           ['조조', '좋다. 다 들어주마.\n저런 사람을 곁에 둘 수만 있다면.', '조조'],
         ]);
         const cs = cities(st, cao.id);
-        if (cs.length) join(st, '관우', cao.id, cs[0], 35);
+        if (cs.length) join(st, '관우', cao.id, cs[0], 30);
         setFlag(st, 'gwanwoo_cao');
         await grant(st, '관우', '적토마', cao.id !== pc(st));
-        lines.push(`${UI.gr('관우')}가 조건을 걸고 조조에게 몸을 맡겼습니다`);
+        addBond(st, '관우', '장료', 35);
+        lines.push(`${UI.gr('관우')}가 세 조건을 걸고 조조에게 몸을 맡겼습니다`);
       },
     },
     {
-      id: 'cheollihang', title: '천리행 — 다섯 관문',
+      id: 'cheollihang', title: '천리행 — 다섯 관문', tier: 3,
       cond: st => {
-        const lb = st.clans.find(c => c.alive && c.ruler === '유비');
-        return flag(st, 'gwanwoo_cao') && lb && alive(st, '관우') && clanOf(st, '관우') !== lb.id &&
-          since(st, 'gwanwoo_cao') >= 3;
+        const cao = clanByRuler(st, '조조'); if (!cao) return false;
+        if (!flag(st, 'gwanwoo_cao') || since(st, 'gwanwoo_cao') < 6) return false;
+        if (!serves(st, '관우', cao.id)) return false;
+        /* 돌아갈 곳이 있어야 떠난다 — 유비가 다시 성을 얻었을 때 */
+        const lb = clanByRuler(st, '유비');
+        if (!lb || !cities(st, lb.id).length) return false;
+        /* 조조가 마음을 얻었다면 관우는 남는다 (조조로 플레이할 때의 보람) */
+        return st.gens['관우'].loyal < 60;
       },
-      chance: () => 0.5,
+      chance: st => clamp(0.25 + (60 - st.gens['관우'].loyal) / 100, 0.25, 0.7),
       run: async (st, lines) => {
-        const lb = st.clans.find(c => c.alive && c.ruler === '유비');
+        const lb = clanByRuler(st, '유비');
         await UI.banner('오관을 지나 여섯 장수를 베다');
         await scenes([
           ['관우', '형님이 하북에 계시다는 소식을 들었소.\n약속대로 떠나겠소이다.', '관우 인수를 걸어 두고'],
           ['조조', '쫓지 마라.\n각기 제 주인을 위하는 것이다.', '조조 뒤에서'],
         ]);
         const cs = cities(st, lb.id);
-        if (cs.length) {
-          join(st, '관우', lb.id, cs[0], 100);
-          setFlag(st, 'gwanwoo_back');
-          lines.push(`${UI.gr('관우')}가 다섯 관문을 뚫고 유비에게 돌아갔습니다`);
-        }
+        const home = cs.find(id => st.cities[id].gens.includes('유비')) || cs[0];
+        join(st, '관우', lb.id, home, 100);
+        setFlag(st, 'gwanwoo_back');
+        lines.push(`${UI.gr('관우')}가 다섯 관문을 뚫고 유비에게 돌아갔습니다`);
       },
     },
     {
-      id: 'goseong', title: '고성의 재회',
+      id: 'goseong', title: '고성의 재회', tier: 1,
       cond: st => {
-        const lb = st.clans.find(c => c.alive && c.ruler === '유비');
-        return flag(st, 'gwanwoo_back') && lb && clanOf(st, '관우') === lb.id && clanOf(st, '장비') === lb.id;
+        const lb = clanByRuler(st, '유비'); if (!lb) return false;
+        if (!flag(st, 'gwanwoo_back')) return false;
+        if (!serves(st, '관우', lb.id) || !serves(st, '장비', lb.id)) return false;
+        /* 한 성에 함께 있어야 얼굴을 마주한다 */
+        return together(st, '관우', '장비');
       },
       chance: () => 0.9,
       run: async (st, lines) => {
-        const lb = st.clans.find(c => c.alive && c.ruler === '유비');
+        const lb = clanByRuler(st, '유비');
         await UI.banner('고성의 재회');
         await scenes([
           ['장비', '형님이 조조에게 붙었다더니 무슨 낯으로 오셨소!', '장비 창을 겨누며'],
@@ -1499,6 +1608,7 @@ const STORY_EVENTS = (() => {
         ]);
         clanGens(st, lb.id).forEach(g => { g.loyal = clamp(g.loyal + 12, 0, 100); });
         ['유비', '관우', '장비'].forEach(n => { if (clanOf(st, n) === lb.id) st.gens[n].loyal = 100; });
+        addBond(st, '관우', '장비', 40); addBond(st, '유비', '관우', 30); addBond(st, '유비', '장비', 30);
         cities(st, lb.id).forEach(id => { st.cities[id].train = clamp(st.cities[id].train + 8, 0, 100); });
       },
     },
@@ -1507,7 +1617,7 @@ const STORY_EVENTS = (() => {
      *  손씨의 약진 · 강하 공방
      * ══════════════════════════════════════════════════════════════ */
     {
-      id: 'gangdong', title: '소패왕의 강동 평정',
+      id: 'gangdong', title: '소패왕의 강동 평정', tier: 3,
       cond: st => {
         const sc = clanByRuler(st, '손책');
         if (!sc) return false;
@@ -1536,7 +1646,7 @@ const STORY_EVENTS = (() => {
       },
     },
     {
-      id: 'hwangjo', title: '강하 공방 — 황조 토벌',
+      id: 'hwangjo', title: '강하 공방 — 황조 토벌', tier: 3,
       cond: st => {
         const sn = st.clans.find(c => c.alive && ['손권', '손책'].includes(c.ruler));
         const yp = clanByRuler(st, '유표');
@@ -1564,7 +1674,7 @@ const STORY_EVENTS = (() => {
       },
     },
     {
-      id: 'hapbi', title: '합비 — 장료가 온다',
+      id: 'hapbi', title: '합비 — 장료가 온다', tier: 2,
       cond: st => {
         const sn = st.clans.find(c => c.alive && ['손권', '손책'].includes(c.ruler));
         if (!sn || !alive(st, '장료')) return false;
@@ -1593,7 +1703,7 @@ const STORY_EVENTS = (() => {
      *  남방 · 변경의 통치
      * ══════════════════════════════════════════════════════════════ */
     {
-      id: 'saseop', title: '교주의 사왕(士王)',
+      id: 'saseop', title: '교주의 사왕(士王)', tier: 0,
       cond: st => clanOf(st, '사섭') >= 0 && st.year >= 190,
       chance: () => 0.35, repeat: true, cool: 48,
       run: async (st, lines) => {
@@ -1622,7 +1732,7 @@ const STORY_EVENTS = (() => {
      *  북벌과 수성
      * ══════════════════════════════════════════════════════════════ */
     {
-      id: 'jinchang', title: '진창 — 학소의 스무 날',
+      id: 'jinchang', title: '진창 — 학소의 스무 날', tier: 2,
       cond: st => {
         if (!alive(st, '학소')) return false;
         const hs = clanOf(st, '학소');
@@ -1649,7 +1759,7 @@ const STORY_EVENTS = (() => {
       },
     },
     {
-      id: 'samaui_su', title: '움직이지 않는 사마의',
+      id: 'samaui_su', title: '움직이지 않는 사마의', tier: 1,
       cond: st => {
         const sm = clanOf(st, '사마의');
         const ci = clanOf(st, '제갈량');
@@ -1674,7 +1784,7 @@ const STORY_EVENTS = (() => {
       },
     },
     {
-      id: 'wiyeon_ran', title: '위연의 최후',
+      id: 'wiyeon_ran', title: '위연의 최후', tier: 4,
       cond: st => flag(st, 'ojangwon') && alive(st, '위연') && clanOf(st, '위연') >= 0,
       chance: () => 0.6,
       run: async (st, lines) => {
@@ -1712,7 +1822,7 @@ const STORY_EVENTS = (() => {
       },
     },
     {
-      id: 'gangyu_buk', title: '강유의 북벌',
+      id: 'gangyu_buk', title: '강유의 북벌', tier: 2,
       cond: st => clanOf(st, '강유') >= 0 && st.year >= 240 &&
         cities(st, clanOf(st, '강유')).includes(17),
       chance: () => 0.4, repeat: true, cool: 30,
@@ -1735,7 +1845,7 @@ const STORY_EVENTS = (() => {
       },
     },
     {
-      id: 'jin_seonyang', title: '위에서 진으로',
+      id: 'jin_seonyang', title: '위에서 진으로', tier: 4,
       cond: st => {
         const ci = clanOf(st, '사마소') >= 0 ? clanOf(st, '사마소') : clanOf(st, '사마사');
         return ci >= 0 && st.clans[ci] && ['사마사', '사마소', '사마의'].includes(st.clans[ci].ruler) &&
@@ -1756,12 +1866,13 @@ const STORY_EVENTS = (() => {
       },
     },
     {
-      id: 'eumpyeong', title: '음평의 샛길',
+      id: 'eumpyeong', title: '음평의 샛길', tier: 4,
       cond: st => {
         const ci = clanOf(st, '등애');
         const chok = st.clans.find(c => c.alive && ['유선', '강유', '제갈량'].includes(c.ruler));
         return ci >= 0 && chok && ci !== chok.id && adjacentTo(st, ci, chok.id) &&
-          cities(st, chok.id).includes(41) && st.year >= 255;
+          cities(st, chok.id).includes(41) && st.year >= 255 && elapsed(st) >= 18 &&
+          declined(st, chok.id, 0.6) && cities(st, ci).length >= cities(st, chok.id).length * 2;
       },
       chance: () => 0.35,
       run: async (st, lines) => {
