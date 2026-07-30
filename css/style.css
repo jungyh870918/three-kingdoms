@@ -126,6 +126,17 @@ canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edge
 }
 @keyframes blink { 50% { opacity: 0; } }
 
+/* ── 정사 각주 쪽지 ───────────────────────────────────────────────── */
+.annalpane {
+  left: 200px; top: 250px; width: 812px; padding: 18px 24px 20px; z-index: 40;
+}
+.annalpane .hw {
+  color: var(--cyan); font-size: 26px; letter-spacing: 2px; margin-bottom: 12px;
+}
+.annalpane .tx {
+  color: #e8e8f8; font-size: 25px; line-height: 36px; white-space: pre-wrap;
+}
+
 /* ── 도시 정보 패널 ────────────────────────────────────────────────── */
 #citypane { left: 8px; top: 56px; width: 500px; z-index: 20; }
 #citypane .hd { display: flex; gap: 14px; align-items: center; margin-bottom: 6px; }

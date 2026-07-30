@@ -51,7 +51,9 @@ const Events = (() => {
     }
     return true;
   }
-  const storyList = () => (typeof STORY_EVENTS !== 'undefined' ? STORY_EVENTS : []);
+  /* 사서 이벤트 — 연의 계열(story.js) + 정사 계열(annals.js) */
+  const storyList = () => (typeof STORY_EVENTS !== 'undefined' ? STORY_EVENTS : [])
+    .concat(typeof ANNALS_EVENTS !== 'undefined' ? ANNALS_EVENTS : []);
   /* 사람 사이의 일 — human.js. 읽는 순서에 매이지 않도록 그때그때 찾는다 */
   const randomList = () => RANDOM.concat(typeof HUMAN_EVENTS !== 'undefined' ? HUMAN_EVENTS : []);
 

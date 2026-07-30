@@ -28,7 +28,7 @@ const load = f => vm.runInContext(fs.readFileSync(path.join(ROOT, 'js', f), 'utf
 /* UI · Game 을 말없는 인형으로 바꿔 끼운다 */
 const seen = [];                                   /* 이번 달에 터진 연출 */
 sb.UI = {
-  speech: async () => {}, banner: async () => {}, anyKey: async () => {},
+  speech: async () => {}, banner: async () => {}, anyKey: async () => {}, annal: async () => {},
   confirm: async () => Math.random() < 0.5, face: () => {},
   yl: s => s, gr: s => s, rd: s => s, cy: s => s, mg: s => s,
 };
@@ -97,9 +97,11 @@ sb.Game = {
 };
 load('events.js');
 load('story.js');
+load('annals.js');
 load('human.js');
-const { Events, STORY_EVENTS, HUMAN_EVENTS } =
-  grab('({ Events, STORY_EVENTS, HUMAN_EVENTS })');
+const { Events, HUMAN_EVENTS } = grab('({ Events, HUMAN_EVENTS })');
+/* 연의 계열과 정사 계열을 합쳐 하나로 검사한다 */
+const STORY_EVENTS = Events.STORY;
 
 /* ── 판 만들기 (game.js newGame 의 요지만) ────────────────────────── */
 function newGame(scenIdx, playerClanIdx) {

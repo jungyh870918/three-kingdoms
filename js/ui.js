@@ -415,6 +415,17 @@ const UI = (() => {
     el.remove();
   }
 
+  /* ── 정사 각주 — 연의와 무엇이 다른지 적어 두는 쪽지 ────────────── */
+  async function annal(text, title) {
+    const el = document.createElement('div');
+    el.className = 'panel annalpane';
+    el.innerHTML =
+      `<div class="hw">${title || '정사(正史)에서는'}</div><div class="tx">${text}</div>`;
+    center.appendChild(el);
+    await anyKey('');
+    el.remove();
+  }
+
   async function confirm(prompt) {
     msg(prompt, true);
     const i = await menu([{ label: '예' }, { label: '아니오' }], { x: 900, y: 560, width: 180 });
@@ -428,7 +439,7 @@ const UI = (() => {
   return {
     fit, cmdbar, msg, anyKey, market, date, face, cityPane, menu, topCommand, pickNum,
     pickCity, pickGeneral, table, speech, confirm, report, nextInput, isCancel, isOk,
-    banner, bio,
+    banner, bio, annal,
     cy, yl, gr, mg, og, rd, $,
   };
 })();
