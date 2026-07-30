@@ -39,6 +39,25 @@ const UI = (() => {
     }
     view.s = s;
     view.rot = rot;
+    placePad(vw, vh, s, rot);
+  }
+
+  /* 조작판을 레터박스(검은 여백)에 앉힌다 — 게임 화면을 가리지 않게 한다.
+     여백이 모자라면 오른쪽 아래에 겹쳐 놓고 방향 버튼을 접는다. */
+  function placePad(vw, vh, s, rot) {
+    const el = $('#touchpad');
+    if (!el) return;
+    const mx = Math.max(0, (vw - (rot ? 800 : 1280) * s) / 2);   /* 좌우 여백 */
+    const my = Math.max(0, (vh - (rot ? 1280 : 800) * s) / 2);   /* 위아래 여백 */
+    el.classList.remove('side', 'foot', 'float');
+    el.style.width = ''; el.style.height = '';
+    /* 검수용 : ?pad=side|foot|float 로 강제할 수 있다 */
+    let force = null;
+    try { force = new URLSearchParams(location.search).get('pad'); } catch (e) { /* noop */ }
+    /* 버튼 크기는 CSS 가 실제 픽셀로 못 박는다 — 여기서는 어디에 둘지만 고른다 */
+    if (force === 'side' || (!force && mx >= 74)) el.classList.add('side');
+    else if (force === 'foot' || (!force && my >= 74)) el.classList.add('foot');
+    else el.classList.add('float');
   }
 
   /* 화면 좌표 → 스테이지 내부 좌표(1280x800 기준) */
@@ -86,6 +105,45 @@ const UI = (() => {
 
   const isCancel = ev => ev.t === 'key' && ['Escape', 'Backspace', 'x', 'X'].includes(ev.k);
   const isOk = ev => ev.t === 'key' && ['Enter', ' ', 'z', 'Z'].includes(ev.k);
+
+  /* ── 손가락 조작 ─────────────────────────────────────────────────
+   *  터치 기기에서는 우클릭이 없으므로 ESC 를 낼 방법이 아예 없다.
+   *  스테이지 밖에 실제 픽셀 크기의 조작판을 두어 그것을 대신한다.
+   * ---------------------------------------------------------------- */
+  const TOUCH = (() => {
+    try {
+      if (new URLSearchParams(location.search).get('touch') === '1') return true;
+      if (new URLSearchParams(location.search).get('touch') === '0') return false;
+    } catch (e) { /* noop */ }
+    return (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) ||
+      ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+  })();
+  if (TOUCH) document.documentElement.classList.add('touch');
+
+  /* 명령바 높이 — CSS 의 #cmdbar 와 반드시 같아야 한다 (지도 클릭 좌표의 기준) */
+  const BAR = TOUCH ? 72 : 44;
+  const HIT = TOUCH ? 30 : 16;      /* 지도에서 도시를 잡는 반경 */
+
+  const pad = $('#touchpad');
+  if (pad) {
+    /* 조작판은 스테이지 밖이라 stage 리스너를 타지 않는다 — 직접 키로 바꿔 보낸다 */
+    const hit = e => {
+      const b = e.target.closest && e.target.closest('.tb');
+      if (!b) return;
+      e.preventDefault(); e.stopPropagation();
+      send({ t: 'key', k: b.dataset.key });
+    };
+    pad.addEventListener('touchstart', hit, { passive: false });
+    pad.addEventListener('mousedown', hit);
+  }
+  /* 'normal' 평시 · 'war' 전투(부대·종료 버튼이 늘어난다) · 'off' 감춤 */
+  function padMode(m) {
+    if (!pad) return;
+    pad.classList.toggle('war', m === 'war');
+    pad.classList.toggle('hidden', m === 'off');
+  }
+  /* 손가락일 때는 목록을 한 번 눌러 고르고 다시 눌러 결정한다 (오조작 방지) */
+  const twoTap = () => TOUCH;
 
   /* ── 색 헬퍼 ────────────────────────────────────────────────────── */
   const cy = s => `<span class="hi">${s}</span>`;
@@ -165,7 +223,7 @@ const UI = (() => {
   async function menu(items, opt) {
     opt = opt || {};
     const el = document.createElement('div');
-    el.className = 'panel menu';
+    el.className = 'panel menu' + (items.length <= 8 ? ' big' : '');
     el.style.left = (opt.x !== undefined ? opt.x : 40) + 'px';
     el.style.top = (opt.y !== undefined ? opt.y : 60) + 'px';
     if (opt.width) el.style.width = opt.width + 'px';
@@ -213,7 +271,7 @@ const UI = (() => {
       if (ev.t === 'click') {
         const t = ev.target.closest && ev.target.closest('.ci');
         if (t) { const i = +t.dataset.cmd; if (!allowed || allowed.includes(i)) return i; }
-        if (ev.y > 44 && ev.y < 690) { const cid = GameMap.at(ev.x, ev.y - 44); if (cid) return { city: cid }; }
+        if (ev.y > BAR && ev.y < 690) { const cid = GameMap.at(ev.x, ev.y - BAR, HIT); if (cid) return { city: cid }; }
         continue;
       }
       if (/^[0-9]$/.test(ev.k)) { const i = +ev.k; if (!allowed || allowed.includes(i)) { cmdbar(i); return i; } }
@@ -225,9 +283,29 @@ const UI = (() => {
   async function pickNum(prompt, min, max, def) {
     let buf = '';
     const show = () => msg(`${prompt} (${min}～${max})  ${yl(buf === '' ? (def !== undefined ? def : 0) : buf)}`, true);
+    /* 손가락으로는 숫자를 칠 수 없다 — 숫자판을 띄운다 */
+    let np = null;
+    if (TOUCH) {
+      np = document.createElement('div');
+      np.className = 'panel numpad';
+      np.innerHTML =
+        ['7', '8', '9', '4', '5', '6', '1', '2', '3'].map(d => `<button class="np" data-key="${d}">${d}</button>`).join('') +
+        '<button class="np" data-key="0">0</button>' +
+        '<button class="np sm" data-key="Backspace">지움</button>' +
+        '<button class="np sm" data-key="ArrowUp">최대</button>' +
+        '<button class="np sm esc" data-key="Escape">취소</button>' +
+        '<button class="np sm ok" data-key="Enter">결정</button>';
+      center.appendChild(np);
+    }
     show();
+    try {
     while (true) {
-      const ev = await nextInput();
+      let ev = await nextInput();
+      /* 숫자판을 누른 것도 키로 취급한다 */
+      if (ev.t === 'click' && np) {
+        const b = ev.target.closest && ev.target.closest('.np');
+        if (b && np.contains(b)) ev = { t: 'key', k: b.dataset.key };
+      }
       if (ev.t !== 'key') continue;
       const k = ev.k;
       if (/^[0-9]$/.test(k)) { if (buf.length < 8) buf += k; show(); }
@@ -240,6 +318,7 @@ const UI = (() => {
         return v;
       } else if (['Escape', 'x', 'X'].includes(k)) return null;
     }
+    } finally { if (np) np.remove(); }
   }
 
   /* ── 도시 지정(지도에서) ────────────────────────────────────────── */
@@ -260,7 +339,7 @@ const UI = (() => {
         const ev = await nextInput();
         if (ev.t === 'click') {
           if (ev.y > 44) {
-            const cid = GameMap.at(ev.x, ev.y - 44);
+            const cid = GameMap.at(ev.x, ev.y - BAR, HIT);
             if (cid && list.includes(cid)) {
               if (cid === list[i]) return cid;
               i = list.indexOf(cid); show();
@@ -334,7 +413,7 @@ const UI = (() => {
     el.style.cssText = `left:${opt.x || 24}px;top:${opt.y || 56}px;width:${opt.w || 1000}px;max-height:600px;overflow:hidden`;
     center.appendChild(el);
     let page = 0, sel = 0;
-    const per = opt.per || 15;
+    const per = opt.per || (twoTap() ? 9 : 15);
     const pages = Math.max(1, Math.ceil(rows.length / per));
     const render = () => {
       const view = rows.slice(page * per, page * per + per);
@@ -350,7 +429,12 @@ const UI = (() => {
         const ev = await nextInput();
         if (ev.t === 'click') {
           const tr = ev.target.closest && ev.target.closest('tr');
-          if (opt.pick && tr && el.contains(tr) && tr.dataset.i !== undefined) return +tr.dataset.i;
+          if (opt.pick && tr && el.contains(tr) && tr.dataset.i !== undefined) {
+            const i = +tr.dataset.i;
+            /* 손가락이면 첫 번째 누름은 고르기만 한다 */
+            if (twoTap() && i !== page * per + sel) { sel = i - page * per; render(); continue; }
+            return i;
+          }
           if (!el.contains(ev.target)) return null;
           continue;
         }
@@ -443,7 +527,7 @@ const UI = (() => {
   return {
     fit, cmdbar, msg, anyKey, market, date, face, cityPane, menu, topCommand, pickNum,
     pickCity, pickGeneral, table, speech, confirm, report, nextInput, isCancel, isOk,
-    banner, bio, annal,
+    banner, bio, annal, padMode, TOUCH, BAR,
     cy, yl, gr, mg, og, rd, $,
   };
 })();

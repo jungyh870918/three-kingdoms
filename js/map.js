@@ -273,9 +273,9 @@ const GameMap = (() => {
     }
   }
 
-  function at(px, py) {   // 화면(2배) 좌표 → 도시 id
+  function at(px, py, tol) {   // 화면(2배) 좌표 → 도시 id (tol 은 스테이지 픽셀 기준 반경)
     const x = px / 2, y = py / 2;
-    let best = null, bd = 16;
+    let best = null, bd = (tol === undefined ? 16 : tol) / 2 * 2;
     CITIES.forEach(c => {
       const d = Math.hypot(c.nx * W - x, c.ny * H - y);
       if (d < bd) { bd = d; best = c.id; }

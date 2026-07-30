@@ -378,6 +378,7 @@ const Battle = (() => {
     };
     const scr = UI.$('#warscreen');
     scr.classList.add('on');
+    UI.padMode('war');                 /* 손가락 조작판에 부대·종료 버튼을 낸다 */
     UI.msg('');
     const log = [];
     await say(`${UI.yl(B.atkName + ' 군')}이 ${UI.yl(CITIES[o.toCity - 1].name)}의 ${UI.yl(B.defName + ' 군')}을 공격합니다`);
@@ -406,6 +407,7 @@ const Battle = (() => {
     });
     await say(winner === 'A' ? UI.yl(`${B.atkName} 군이 승리했습니다`) : UI.cy(`${B.defName} 군이 성을 지켜냈습니다`));
     scr.classList.remove('on');
+    UI.padMode('normal');
     return { winner, survivors, dead, captured };
   }
 

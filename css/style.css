@@ -262,3 +262,113 @@ canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edge
   font-size: 20px; line-height: 27px; color: #ffd9a0; white-space: pre-line;
 }
 .biopane .lore b { color: var(--orange); font-weight: normal; }
+
+/* =========================================================================
+ *  손가락으로 할 때 — html.touch
+ *
+ *  스테이지(1280x800)는 화면에 맞춰 축소되므로, 폰에서는 배율이 0.5 안팎이 된다.
+ *  즉 스테이지 안의 100px 이 실제로는 50px 남짓이다. 그래서
+ *   · 스테이지 안의 목표물은 넉넉히 키우고 (짧은 메뉴 · 일람의 줄 · 명령바)
+ *   · 진짜로 크기를 보장해야 하는 조작 버튼은 스테이지 밖에 실제 픽셀로 둔다
+ * ====================================================================== */
+
+/* 상단 명령 바 — 높이를 키워 위아래 여백을 넓힌다 (글자 크기는 그대로 두어 열이 넘치지 않게) */
+html.touch #cmdbar { height: 72px; gap: 18px; }
+html.touch #mapwrap { top: 72px; height: 728px; }
+html.touch #map { height: 728px; }
+html.touch #market, html.touch #citypane { top: 84px; }
+
+/* 짧은 메뉴는 손가락 크기로 키운다 (긴 목록은 화면을 넘기므로 그대로 둔다) */
+html.touch .menu.big { min-width: 380px; }
+html.touch .menu.big .it {
+  min-height: 72px; line-height: 72px; padding: 0 24px; font-size: 32px;
+  border-bottom: 2px solid rgba(255,255,255,.08);
+}
+html.touch .menu.big .hd { min-height: 52px; line-height: 52px; }
+
+/* 일람의 줄 — 한 화면에 담는 줄 수를 줄이고 줄 높이를 키운다(줄 수는 ui.js 가 정한다) */
+html.touch .grid { font-size: 26px; line-height: 52px; }
+html.touch .grid td, html.touch .grid th { padding: 0 12px; }
+html.touch .grid tr.sel td { outline: 2px solid var(--brd-hi); outline-offset: -2px; }
+
+/* 군주 선택 카드 */
+html.touch #rulersel .card { padding: 10px 6px; }
+
+/* ── 스테이지 밖 조작판 ─────────────────────────────────────────────── */
+#touchpad { display: none; }
+html.touch #touchpad {
+  display: grid;
+  position: fixed;
+  gap: 6px;
+  z-index: 200;
+  place-content: center;
+  padding: 4px;
+}
+/* 좌우 여백에 세로로 (가로로 든 폰) — 여백 한가운데에 모아 둔다 */
+html.touch #touchpad.side {
+  right: 2px; top: 50%; transform: translateY(-50%);
+  grid-template-columns: repeat(2, 60px);
+}
+/* 위아래 여백에 가로로 (세로로 든 폰 — 화면이 돌아간 경우) */
+html.touch #touchpad.foot {
+  bottom: 2px; left: 50%; transform: translateX(-50%);
+  grid-template-columns: repeat(4, 68px);
+}
+/* 여백이 없으면 오른쪽 아래에 겹쳐 놓는다 */
+html.touch #touchpad.float {
+  right: 8px; bottom: 8px;
+  grid-auto-flow: column;
+  grid-auto-columns: 56px;
+  place-content: end;
+  opacity: .94;
+}
+html.touch #touchpad.float .tb-nav { display: none; }
+html.touch #touchpad.float .tb { width: 56px; }
+#touchpad .tb {
+  width: 100%; min-width: 56px; height: 56px;
+  font-family: inherit;
+  font-size: 19px;
+  line-height: 1;
+  color: var(--white);
+  background: rgba(10, 10, 112, .82);
+  border: 2px solid var(--brd-hi);
+  border-radius: 0;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  padding: 0;
+}
+#touchpad .tb:active { background: var(--brd); }
+#touchpad .tb-ok { border-color: var(--green); }
+#touchpad .tb-esc { border-color: var(--red); }
+#touchpad .tb-war { display: none; }
+html.touch #touchpad.war .tb-war { display: block; }
+html.touch #touchpad.hidden { display: none; }
+
+/* 화면이 아주 좁으면 방향 버튼을 접는다 — 목록은 눌러서 고를 수 있다 */
+@media (max-width: 560px) {
+  html.touch #touchpad .tb-nav { display: none; }
+}
+
+/* 타이틀의 안내 — 손가락일 때만 보인다 */
+#touchkeys { display: none; }
+html.touch #touchkeys { display: block; margin-top: 4px; }
+html.touch #title .keys:not(#touchkeys) { display: none; }
+
+/* ── 숫자판 — 손가락으로 병사 수·금액을 넣는다 ─────────────────────── */
+.numpad {
+  position: absolute; left: 396px; top: 104px; width: 488px;
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 14px;
+  z-index: 90;
+}
+.numpad .np {
+  height: 84px;
+  font-family: inherit; font-size: 40px; line-height: 1;
+  color: var(--white); background: var(--navy-lt);
+  border: 2px solid var(--brd-hi); cursor: pointer;
+  touch-action: manipulation; padding: 0;
+}
+.numpad .np.sm { font-size: 28px; }
+.numpad .np.ok { border-color: var(--green); }
+.numpad .np.esc { border-color: var(--red); }
+.numpad .np:active { background: var(--brd); }
