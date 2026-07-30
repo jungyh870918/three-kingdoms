@@ -149,6 +149,8 @@ const Battle = (() => {
 
   function drawHud(msg) {
     UI.$('#warbar').innerHTML =
+      (UI.TOUCH ? `<button class="tbtn" data-key="Tab">부대</button>` +
+                  `<button class="tbtn" data-key="e">턴종료</button>` : '') +
       `<span class="hy">${B.turn}/${B.maxTurn}턴</span>
        <span class="${B.phase === 'A' ? 'hr' : 'hi'}">${B.phase === 'A' ? '공격측' : '수비측'} 차례</span>
        <span>${B.atkName} 군 <span class="hy">${sum('A')}</span></span>
@@ -304,7 +306,12 @@ const Battle = (() => {
       drawHud(B.sel
         ? '이동:빈 칸 / 공격:적 클릭　Enter 대기　Tab 다음　E 종료'
         : `부대를 클릭 (남은 부대 ${remain.length})　Tab 선택　E 종료`);
-      const ev = await UI.nextInput();
+      let ev = await UI.nextInput();
+      /* 전투 바의 손가락 버튼을 키로 바꿔 받는다 */
+      if (ev.t === 'click' && ev.target && ev.target.closest) {
+        const b = ev.target.closest('.tbtn');
+        if (b) ev = { t: 'key', k: b.dataset.key };
+      }
       if (ev.t === 'key') {
         if (ev.k === 'Tab' || ev.k === ' ') {
           const i = remain.indexOf(B.sel);
@@ -378,7 +385,6 @@ const Battle = (() => {
     };
     const scr = UI.$('#warscreen');
     scr.classList.add('on');
-    UI.padMode('war');                 /* 손가락 조작판에 부대·종료 버튼을 낸다 */
     UI.msg('');
     const log = [];
     await say(`${UI.yl(B.atkName + ' 군')}이 ${UI.yl(CITIES[o.toCity - 1].name)}의 ${UI.yl(B.defName + ' 군')}을 공격합니다`);
@@ -407,7 +413,6 @@ const Battle = (() => {
     });
     await say(winner === 'A' ? UI.yl(`${B.atkName} 군이 승리했습니다`) : UI.cy(`${B.defName} 군이 성을 지켜냈습니다`));
     scr.classList.remove('on');
-    UI.padMode('normal');
     return { winner, survivors, dead, captured };
   }
 

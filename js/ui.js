@@ -39,25 +39,6 @@ const UI = (() => {
     }
     view.s = s;
     view.rot = rot;
-    placePad(vw, vh, s, rot);
-  }
-
-  /* 조작판을 레터박스(검은 여백)에 앉힌다 — 게임 화면을 가리지 않게 한다.
-     여백이 모자라면 오른쪽 아래에 겹쳐 놓고 방향 버튼을 접는다. */
-  function placePad(vw, vh, s, rot) {
-    const el = $('#touchpad');
-    if (!el) return;
-    const mx = Math.max(0, (vw - (rot ? 800 : 1280) * s) / 2);   /* 좌우 여백 */
-    const my = Math.max(0, (vh - (rot ? 1280 : 800) * s) / 2);   /* 위아래 여백 */
-    el.classList.remove('side', 'foot', 'float');
-    el.style.width = ''; el.style.height = '';
-    /* 검수용 : ?pad=side|foot|float 로 강제할 수 있다 */
-    let force = null;
-    try { force = new URLSearchParams(location.search).get('pad'); } catch (e) { /* noop */ }
-    /* 버튼 크기는 CSS 가 실제 픽셀로 못 박는다 — 여기서는 어디에 둘지만 고른다 */
-    if (force === 'side' || (!force && mx >= 74)) el.classList.add('side');
-    else if (force === 'foot' || (!force && my >= 74)) el.classList.add('foot');
-    else el.classList.add('float');
   }
 
   /* 화면 좌표 → 스테이지 내부 좌표(1280x800 기준) */
@@ -124,26 +105,23 @@ const UI = (() => {
   const BAR = TOUCH ? 72 : 44;
   const HIT = TOUCH ? 30 : 16;      /* 지도에서 도시를 잡는 반경 */
 
-  const pad = $('#touchpad');
-  if (pad) {
-    /* 조작판은 스테이지 밖이라 stage 리스너를 타지 않는다 — 직접 키로 바꿔 보낸다 */
-    const hit = e => {
-      const b = e.target.closest && e.target.closest('.tb');
-      if (!b) return;
-      e.preventDefault(); e.stopPropagation();
-      send({ t: 'key', k: b.dataset.key });
-    };
-    pad.addEventListener('touchstart', hit, { passive: false });
-    pad.addEventListener('mousedown', hit);
-  }
-  /* 'normal' 평시 · 'war' 전투(부대·종료 버튼이 늘어난다) · 'off' 감춤 */
-  function padMode(m) {
-    if (!pad) return;
-    pad.classList.toggle('war', m === 'war');
-    pad.classList.toggle('hidden', m === 'off');
-  }
   /* 손가락일 때는 목록을 한 번 눌러 고르고 다시 눌러 결정한다 (오조작 방지) */
   const twoTap = () => TOUCH;
+
+  /* 손가락용 버튼 줄 — 필요한 화면 안에 직접 붙인다.
+     화면 밖에 떠 있는 조작판보다, 쓰는 자리에 있는 편이 낫다.
+     data-key 를 그대로 키 입력으로 바꿔 넘긴다. */
+  const tbtns = list => TOUCH
+    ? `<div class="tbtns">${list.map(([k, label, cls]) =>
+        `<button class="tbtn ${cls || ''}" data-key="${k}">${label}</button>`).join('')}</div>`
+    : '';
+  /* 클릭 이벤트가 버튼을 눌렀으면 키 이벤트로 바꿔 돌려준다 */
+  const asKey = (ev, root) => {
+    if (ev.t !== 'click' || !ev.target.closest) return ev;
+    const b = ev.target.closest('.tbtn');
+    if (!b || (root && !root.contains(b))) return ev;
+    return { t: 'key', k: b.dataset.key };
+  };
 
   /* ── 색 헬퍼 ────────────────────────────────────────────────────── */
   const cy = s => `<span class="hi">${s}</span>`;
@@ -333,12 +311,21 @@ const UI = (() => {
       msg(`${prompt} : ${yl(list[i] + '.' + CITIES[list[i] - 1].name)}  ${cy('←→ 선택 / Enter 결정')}`, true);
       Render.now();
     };
+    /* 손가락으로는 지도를 눌러 고르지만, 커서를 옮기고 닫을 길도 있어야 한다 */
+    let bar = null;
+    if (TOUCH) {
+      bar = document.createElement('div');
+      bar.className = 'panel citybar';
+      bar.innerHTML = tbtns([['ArrowLeft', '◀ 이전'], ['ArrowRight', '다음 ▶'],
+                             ['Enter', '결정', 'ok'], ['Escape', '닫기', 'esc']]);
+      center.appendChild(bar);
+    }
     show();
     try {
       while (true) {
-        const ev = await nextInput();
+        const ev = asKey(await nextInput(), bar);
         if (ev.t === 'click') {
-          if (ev.y > 44) {
+          if (ev.y > BAR) {
             const cid = GameMap.at(ev.x, ev.y - BAR, HIT);
             if (cid && list.includes(cid)) {
               if (cid === list[i]) return cid;
@@ -353,7 +340,7 @@ const UI = (() => {
         else if (isOk(ev)) return list[i];
         else if (isCancel(ev)) return null;
       }
-    } finally { st.cursorCity = prev; cityPane(st, null); Render.now(); }
+    } finally { if (bar) bar.remove(); st.cursorCity = prev; cityPane(st, null); Render.now(); }
   }
 
   /* ── 무장 선택 ──────────────────────────────────────────────────── */
@@ -377,13 +364,16 @@ const UI = (() => {
             <td>${s[0]}</td><td>${s[1]}</td><td>${s[2]}</td><td>${s[3]}</td><td>${s[4]}</td><td>${s[5]}</td>
             <td>${g.loyal !== undefined ? g.loyal : '－'}</td>
             <td class="l">${g.acted ? '행동완료' : (g.tag || '')}</td></tr>`;
-        }).join('')}</table>`;
+        }).join('')}</table>` +
+        tbtns(opt.multi
+          ? [['Enter', '결정', 'ok'], ['Escape', '닫기', 'esc']]
+          : [['Escape', '닫기', 'esc']]);
       face(gens[sel].name, gens[sel].name === (st.clans[st.playerClan] || {}).ruler);
     };
     render();
     try {
       while (true) {
-        const ev = await nextInput();
+        const ev = asKey(await nextInput(), el);
         if (ev.t === 'click') {
           const t = ev.target.closest && ev.target.closest('tr');
           if (t && el.contains(t) && t.dataset.i !== undefined) {
@@ -410,23 +400,27 @@ const UI = (() => {
     opt = opt || {};
     const el = document.createElement('div');
     el.className = 'panel';
-    el.style.cssText = `left:${opt.x || 24}px;top:${opt.y || 56}px;width:${opt.w || 1000}px;max-height:600px;overflow:hidden`;
+    el.style.cssText = `left:${opt.x || 24}px;top:${opt.y || 56}px;width:${opt.w || 1000}px;` +
+      `max-height:${twoTap() ? 644 : 600}px;overflow:hidden`;
     center.appendChild(el);
     let page = 0, sel = 0;
-    const per = opt.per || (twoTap() ? 9 : 15);
+    const per = opt.per || (twoTap() ? 8 : 15);
     const pages = Math.max(1, Math.ceil(rows.length / per));
     const render = () => {
       const view = rows.slice(page * per, page * per + per);
       el.innerHTML = `<div class="hd">${title} <span class="hi">(${page + 1}/${pages})</span></div>
         <table class="grid"><tr>${head.map(h => `<th class="${h[1] || ''}">${h[0]}</th>`).join('')}</tr>
         ${view.map((r, i) => `<tr class="${opt.pick && i === sel ? 'sel' : ''}" data-i="${page * per + i}">` +
-          r.map((c, j) => `<td class="${head[j][1] || ''}">${c}</td>`).join('') + '</tr>').join('')}</table>`;
+          r.map((c, j) => `<td class="${head[j][1] || ''}">${c}</td>`).join('') + '</tr>').join('')}</table>` +
+        tbtns(pages > 1
+          ? [['ArrowLeft', '◀ 이전'], ['ArrowRight', '다음 ▶'], ['Escape', '닫기', 'esc']]
+          : [['Escape', '닫기', 'esc']]);
       msg(opt.pick ? cy('↑↓ 선택 / ←→ 페이지 / Enter 열전 / ESC 닫기') : cy('←→ 페이지 넘김 / ESC 닫기'));
     };
     render();
     try {
       while (true) {
-        const ev = await nextInput();
+        const ev = asKey(await nextInput(), el);
         if (ev.t === 'click') {
           const tr = ev.target.closest && ev.target.closest('tr');
           if (opt.pick && tr && el.contains(tr) && tr.dataset.i !== undefined) {
@@ -530,7 +524,7 @@ const UI = (() => {
   return {
     fit, cmdbar, msg, anyKey, market, date, face, cityPane, menu, topCommand, pickNum,
     pickCity, pickGeneral, table, speech, confirm, report, nextInput, isCancel, isOk,
-    banner, bio, annal, padMode, TOUCH, BAR,
+    banner, bio, annal, TOUCH, BAR,
     cy, yl, gr, mg, og, rd, $,
   };
 })();

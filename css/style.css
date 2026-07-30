@@ -294,66 +294,30 @@ html.touch .grid tr.sel td { outline: 2px solid var(--brd-hi); outline-offset: -
 /* 군주 선택 카드 */
 html.touch #rulersel .card { padding: 10px 6px; }
 
-/* ── 스테이지 밖 조작판 ─────────────────────────────────────────────── */
-#touchpad { display: none; }
-html.touch #touchpad {
-  display: grid;
-  position: fixed;
-  gap: 6px;
-  z-index: 200;
-  place-content: center;
-  padding: 4px;
+/* ── 손가락 버튼 줄 — 필요한 화면 안에 붙는다 ───────────────────────── */
+.tbtns { display: none; }
+html.touch .tbtns {
+  display: flex; gap: 10px; margin-top: 12px; padding-top: 10px;
+  border-top: 2px solid var(--navy-lt);
+  justify-content: flex-end;
 }
-/* 좌우 여백에 세로로 (가로로 든 폰) — 여백 한가운데에 모아 둔다 */
-html.touch #touchpad.side {
-  right: 2px; top: 50%; transform: translateY(-50%);
-  grid-template-columns: repeat(2, 60px);
-}
-/* 위아래 여백에 가로로 (세로로 든 폰 — 화면이 돌아간 경우) */
-html.touch #touchpad.foot {
-  bottom: 2px; left: 50%; transform: translateX(-50%);
-  grid-template-columns: repeat(4, 68px);
-}
-/* 여백이 없으면 오른쪽 아래에 겹쳐 놓는다 */
-html.touch #touchpad.float {
-  right: 8px; bottom: 8px;
-  grid-auto-flow: column;
-  grid-auto-columns: 56px;
-  place-content: end;
-  opacity: .94;
-}
-html.touch #touchpad.float .tb-nav { display: none; }
-html.touch #touchpad.float .tb { width: 56px; }
-#touchpad .tb {
-  width: 100%; min-width: 56px; height: 56px;
-  font-family: inherit;
-  font-size: 19px;
-  line-height: 1;
-  color: var(--white);
-  background: rgba(10, 10, 112, .82);
-  border: 2px solid var(--brd-hi);
-  border-radius: 0;
-  cursor: pointer;
+.tbtn {
+  font-family: inherit; font-size: 26px; line-height: 1;
+  min-width: 132px; height: 64px; padding: 0 18px;
+  color: var(--white); background: var(--navy-lt);
+  border: 2px solid var(--brd-hi); cursor: pointer;
   touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
-  padding: 0;
 }
-#touchpad .tb:active { background: var(--brd); }
-#touchpad .tb-ok { border-color: var(--green); }
-#touchpad .tb-esc { border-color: var(--red); }
-#touchpad .tb-war { display: none; }
-html.touch #touchpad.war .tb-war { display: block; }
-html.touch #touchpad.hidden { display: none; }
-
-/* 화면이 아주 좁으면 방향 버튼을 접는다 — 목록은 눌러서 고를 수 있다 */
-@media (max-width: 560px) {
-  html.touch #touchpad .tb-nav { display: none; }
-}
-
-/* 타이틀의 안내 — 손가락일 때만 보인다 */
-#touchkeys { display: none; }
-html.touch #touchkeys { display: block; margin-top: 4px; }
-html.touch #title .keys:not(#touchkeys) { display: none; }
+.tbtn:active { background: var(--brd); }
+.tbtn.ok { border-color: var(--green); }
+.tbtn.esc { border-color: var(--red); }
+/* 지도에서 도시를 고를 때 쓰는 줄 — 지도 위에 따로 띄운다 (메시지창을 가리지 않게) */
+html.touch .citybar { left: 300px; top: 566px; width: 700px; padding: 8px 12px; z-index: 60; }
+html.touch .citybar .tbtns { margin-top: 0; padding-top: 0; border-top: none; justify-content: center; }
+.citybar { display: none; }
+html.touch .citybar { display: block; }
+/* 전투 바의 버튼은 작게 */
+html.touch #warbar .tbtn { min-width: 104px; height: 40px; font-size: 22px; margin-right: 4px; }
 
 /* ── 숫자판 — 손가락으로 병사 수·금액을 넣는다 ─────────────────────── */
 .numpad {
