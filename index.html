@@ -4,6 +4,16 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>삼국지 III — 웹 오마주</title>
+<!--
+  검색엔진에는 이 실행 페이지 대신 소개 페이지를 색인시킨다.
+  실행 페이지는 캔버스로만 그려져 본문 텍스트가 없으므로 단독으로는 검색 가치가
+  낮고, 소개 페이지와 같은 검색어를 두고 경쟁하게 된다.
+  링크는 계속 따라가도록 follow 는 유지한다.
+
+  ※ 소개 사이트의 도메인이 바뀌면 아래 canonical 도 함께 고쳐야 한다.
+-->
+<meta name="robots" content="noindex, follow">
+<link rel="canonical" href="https://web-production-f5ce4.up.railway.app/games/three-kingdoms">
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
